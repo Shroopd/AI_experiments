@@ -1,6 +1,5 @@
 # from __future__ import annotations
 import math
-from typing_extensions import Self
 
 import torch
 from torch import nn
@@ -120,7 +119,7 @@ class AttentionMeta(nn.Module):
         return value_out
 
 
-class AttentionMonoRes(nn.Module):
+class AttentionHeadless(nn.Module):
     def __init__(
         self,
         dims: int,
@@ -168,108 +167,108 @@ class AttentionMonoRes(nn.Module):
         if value_tokens is None:
             value_tokens = key_tokens
 
-        key: torch.Tensor = key_tokens + self.to_key(key_tokens)
+        key: torch.Tensor = self.to_key(key_tokens)
         # [..., K, T]
-        query: torch.Tensor = query_tokens + self.to_query(query_tokens)
+        query: torch.Tensor = self.to_query(query_tokens)
         # [..., Q, T]
 
         attention_raw: torch.Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
         # [..., K, Q, T] = [..., K, 1, T] * [..., 1, Q, T]
         attention_logits: torch.Tensor = self.mask(
-            attention_raw + self.to_attention_logits(attention_raw)
+            self.to_attention_logits(attention_raw)
         )
         # [..., K, Q, T]
         attention_scale = swishmax(attention_logits, dim=-2)
         # [..., K, Q, T]
 
-        value: torch.Tensor = value_tokens + self.to_value_attention(value_tokens)
+        value: torch.Tensor = self.to_value_attention(value_tokens)
         # [..., K, T]
         values_scaled = value.unsqueeze(-2) * attention_scale
         # [..., K, Q, T] = [..., K, 1, T] * [..., K, Q, T]
         value_sum = values_scaled.sum(-3)
         # [..., Q, T]
-        value_out: torch.Tensor = value_sum + self.to_value_out(value_sum)
+        value_out: torch.Tensor = self.to_value_out(value_sum)
         # [..., Q, T]
 
         return value_out
 
 
-class AttentionMono(nn.Module):
-    def __init__(
-        self,
-        token_size: int,
-        attention_size: int,
-        mask: nn.Module = nn.Identity(),
-        *,
-        key_bias=False,
-        query_bias=False,
-        value_bias=False,
-        attention_bias=False,
-        value_up_bias=False,
-        key_down=None,
-        query_down=None,
-        value_down=None,
-        attention_over=None,
-        value_up=None,
-    ) -> None:
-        super().__init__()
+# class AttentionMono(nn.Module):
+#     def __init__(
+#         self,
+#         token_size: int,
+#         attention_size: int,
+#         mask: nn.Module = nn.Identity(),
+#         *,
+#         key_bias=False,
+#         query_bias=False,
+#         value_bias=False,
+#         attention_bias=False,
+#         value_up_bias=False,
+#         key_down=None,
+#         query_down=None,
+#         value_down=None,
+#         attention_over=None,
+#         value_up=None,
+#     ) -> None:
+#         super().__init__()
 
-        # fmt:off
-        self.key_down       = key_down       or nn.Linear(token_size,     attention_size, key_bias)
-        self.query_down     = query_down     or nn.Linear(token_size,     attention_size, query_bias)
-        self.value_down     = value_down     or nn.Linear(token_size,     attention_size, value_bias)
-        self.attention_over = attention_over or nn.Linear(attention_size, attention_size, attention_bias)
-        self.value_up       = value_up       or nn.Linear(attention_size, token_size,     value_up_bias)
-        # fmt:on
+#         # fmt:off
+#         self.key_down       = key_down       or nn.Linear(token_size,     attention_size, key_bias)
+#         self.query_down     = query_down     or nn.Linear(token_size,     attention_size, query_bias)
+#         self.value_down     = value_down     or nn.Linear(token_size,     attention_size, value_bias)
+#         self.attention_over = attention_over or nn.Linear(attention_size, attention_size, attention_bias)
+#         self.value_up       = value_up       or nn.Linear(attention_size, token_size,     value_up_bias)
+#         # fmt:on
 
-        self.mask = mask
+#         self.mask = mask
 
-    def forward(
-        self,
-        query_tokens: torch.Tensor,
-        key_tokens: torch.Tensor | None = None,
-        value_tokens: torch.Tensor | None = None,
-    ):
-        """
-        number of queries:  Q
-        length of queries:  QT
-        number of keys:     K
-        length of keys:     KT
+#     def forward(
+#         self,
+#         query_tokens: torch.Tensor,
+#         key_tokens: torch.Tensor | None = None,
+#         value_tokens: torch.Tensor | None = None,
+#     ):
+#         """
+#         number of queries:  Q
+#         length of queries:  QT
+#         number of keys:     K
+#         length of keys:     KT
 
-        query_tokens.shape  [..., Q, T]
-        key_tokens.shape    [..., K, T]
+#         query_tokens.shape  [..., Q, T]
+#         key_tokens.shape    [..., K, T]
 
-        batching and broadcasting for dimensions prior to last two
-        """
+#         batching and broadcasting for dimensions prior to last two
+#         """
 
-        if key_tokens is None:
-            key_tokens = query_tokens
+#         if key_tokens is None:
+#             key_tokens = query_tokens
 
-        if value_tokens is None:
-            value_tokens = key_tokens
+#         if value_tokens is None:
+#             value_tokens = key_tokens
 
-        key = self.key_down(key_tokens)
-        # [..., K, A]
-        query = self.query_down(query_tokens)
-        # [..., Q, A]
+#         key = self.key_down(key_tokens)
+#         # [..., K, A]
+#         query = self.query_down(query_tokens)
+#         # [..., Q, A]
 
-        attention_raw = key.unsqueeze(-2) * query.unsqueeze(-3)
-        # [..., K, Q, A] = [..., K, 1, A] * [..., 1, Q, A]
-        attention_logits = self.mask(self.attention_over(attention_raw))
-        # [..., K, Q, A]
-        attention_scale = swishmax(attention_logits, dim=-2)
-        # [..., K, Q, A]
+#         attention_raw = key.unsqueeze(-2) * query.unsqueeze(-3)
+#         # [..., K, Q, A] = [..., K, 1, A] * [..., 1, Q, A]
+#         attention_logits = self.mask(self.attention_over(attention_raw))
+#         # [..., K, Q, A]
+#         attention_scale = swishmax(attention_logits, dim=-2)
+#         # [..., K, Q, A]
 
-        value = self.value_down(value_tokens)
-        # [..., K, A]
-        values_scaled = value.unsqueeze(-2) * attention_scale
-        # [..., K, Q, A] = [..., K, 1, A] * [..., K, Q, A]
-        value_sum = values_scaled.sum(-3)
-        # [..., Q, A]
-        value_out = self.value_up(value_sum)
-        # [..., Q, T]
+#         value = self.value_down(value_tokens)
+#         # [..., K, A]
+#         values_scaled = value.unsqueeze(-2) * attention_scale
+#         # [..., K, Q, A] = [..., K, 1, A] * [..., K, Q, A]
+#         value_sum = values_scaled.sum(-3)
+#         # [..., Q, A]
+#         value_out = self.value_up(value_sum)
+#         # [..., Q, T]
 
-        return value_out
+#         return value_out
 
 
 class AttentionZP(nn.Module):
@@ -418,23 +417,29 @@ class LinearActivateZP(nn.Linear):
 class PosEncode(torch.nn.Module):
     def __init__(
         self,
-        dim_pairs,
-        scale_divisor,
-        exp_factor=1.0,
+        dim_pairs: int,
+        # scale_divisor,
+        # exp_factor=1.0,
+        min_wavelength: float,
+        max_wavelength: float,
     ) -> None:
         super().__init__()
         self.D = dim_pairs
-        self.M = scale_divisor / (math.pi * 2)
-        self.I = torch.nn.Buffer(torch.arange(0, self.D) + 1)
-        self.I = self.I * (exp_factor ** (self.I / self.D))
+        i_range = torch.arange(0, self.D)
+        i_mult = (
+            (2 * math.pi)
+            * ((max_wavelength / min_wavelength) ** (i_range / (dim_pairs - 1)))
+            / max_wavelength
+        )
+        self.I = torch.nn.Buffer(i_mult)
 
     def forward(self, x) -> torch.Tensor:
         x = x.unsqueeze(-1)
         out_shape = list(x.size())
         out_shape[-1] = self.D * 2
         out = torch.zeros(out_shape)
-        out[..., 0::2] = torch.sin((x / self.M) * self.I)
-        out[..., 1::2] = torch.cos((x / self.M) * self.I)
+        out[..., 0::2] = torch.sin(x * self.I)
+        out[..., 1::2] = torch.cos(x * self.I)
         return out
 
 
