@@ -19,8 +19,10 @@ NOT_EPSILON = 1
 """A number that isn't very small, and definitely not 0"""
 
 
-def swishmax(input: torch.Tensor, dim):
+def swishmax(input: torch.Tensor, dim, *, shrink_factor=None):
     xexp = input * torch.exp(input - torch.amax(input, dim=dim, keepdim=True))
+    if shrink_factor is not None:
+        xexp = xexp / shrink_factor
     out = torch.div(
         xexp, (torch.sum(torch.abs(xexp), dim=dim, keepdim=True) + NOT_EPSILON)
     )
@@ -39,14 +41,11 @@ def make_weight(*dims: int):
     return Parameter(torch.randn(dims))
 
 
-nn.functional.linear
-
-
 class CompareMeta(nn.Module):
     pass
 
 
-class AttentionMeta(nn.Module):
+class AttentionFractal(nn.Module):
     def __init__(
         self,
         token_dims: int,
@@ -65,9 +64,10 @@ class AttentionMeta(nn.Module):
         ) = (
             (nn.Linear(token_dims, token_dims) for _ in range(5))
             if shape_dims == 2
-            else (AttentionMeta(token_dims, shape_dims - 1) for _ in range(5))
+            else (AttentionFractal(token_dims, shape_dims - 1) for _ in range(5))
         )
-        pass
+        self.row_dims = tuple(-3 - i for i in range(0, self.shape_dims))
+        self.col_dims = tuple(-2 - i for i in range(0, self.shape_dims))
 
     def batchify(self, A: torch.Tensor, lhs: bool, current_shape_dims=None):
         if current_shape_dims is None:
@@ -94,26 +94,110 @@ class AttentionMeta(nn.Module):
             value_tokens = key_tokens
         pass
 
-        key = key_tokens + self.to_key(key_tokens)
-        # [..., K, ...]
         query = query_tokens + self.to_query(query_tokens)
         # [..., Q, ...]
-
-        attention_raw = self.batchify(key, True) * self.batchify(query, False)
-        # [..., K, Q, ...] = [..., K, 1, ...] * [..., 1, Q, ...]
-        attention_logits = attention_raw + self.to_attention_logits(attention_raw)
-
-        # [..., K, Q, ...]
-        attention_scale = swishmax(attention_logits, dim=-self.shape_dims)
-        # [..., K, Q, ...]
-
+        key = key_tokens + self.to_key(key_tokens)
+        # [..., K, ...]
         value = value_tokens + self.to_value_attention(value_tokens)
         # [..., K, ...]
+
+        attention_raw = self.batchify(key, True) * self.batchify(query, False)
+        # [..., K, Q, ..., T] = [..., K, 1, ..., T] * [..., 1, Q, ..., T]
+        attention_logits = attention_raw + self.to_attention_logits(attention_raw)
+        # [..., K, Q, ..., T]
+        attention_scale = swishmax(attention_logits, dim=self.row_dims)
+        # [...,^K, Q, ..., T]
         values_scaled = self.batchify(value, True) * attention_scale
         # [..., K, Q, ...] = [..., K, 1, ...] * [..., K, Q, ...]
-        value_sum = values_scaled.sum(-1 - self.shape_dims)
+        value_sum = values_scaled.sum(self.col_dims)
         # [..., Q, T]
         value_out = value_sum + self.to_value_out(value_sum)
+        # [..., Q, T]
+
+        return value_out
+
+
+class AttentionDeduplicate(nn.Module):
+    def __init__(
+        self,
+        dims: int,
+        mask: nn.Module = nn.Identity(),
+        *,
+        key_bias=False,
+        query_bias=False,
+        value_attention_bias=False,
+        attention_logits_bias=False,
+        value_out_bias=False,
+    ) -> None:
+        super().__init__()
+
+        # fmt:off
+        self.to_key              = nn.Linear(dims, dims, key_bias)
+        self.to_query            = nn.Linear(dims, dims, query_bias)
+        self.to_value_attention  = nn.Linear(dims, dims, value_attention_bias)
+        self.to_attention_logits = nn.Linear(dims, dims, attention_logits_bias)
+        self.to_value_out        = nn.Linear(dims, dims, value_out_bias)
+        # fmt:on
+
+        self.mask = mask
+
+    def forward(
+        self,
+        query_tokens: torch.Tensor,
+        key_tokens: torch.Tensor | None = None,
+        value_tokens: torch.Tensor | None = None,
+    ):
+        """
+        number of queries:  Q
+        length of queries:  QT
+        number of keys:     K
+        length of keys:     KT
+
+        query_tokens.shape  [..., Q, T]
+        key_tokens.shape    [..., K, T]
+
+        batching and broadcasting for dimensions prior to last two
+        """
+
+        if key_tokens is None:
+            key_tokens = query_tokens
+
+        if value_tokens is None:
+            value_tokens = key_tokens
+
+        key: torch.Tensor = self.to_key(key_tokens)
+        # [..., K, T]
+        query: torch.Tensor = self.to_query(query_tokens)
+        # [..., Q, T]
+
+        key_similarity = (
+            torch.cosine_similarity(key.unsqueeze(-2), key.unsqueeze(-3), dim=-1)
+            # [..., K, K]
+            .pow(2)
+            .sum(-1)
+            # [..., K]
+            .unsqueeze(-1)
+            # [..., K, 1]
+            .unsqueeze(-1)
+            # [..., K, 1, 1]
+        )
+
+        attention_raw: torch.Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
+        # [..., K, Q, T] = [..., K, 1, T] * [..., 1, Q, T]
+        attention_logits: torch.Tensor = self.mask(
+            self.to_attention_logits(attention_raw)
+        )
+        # [..., K, Q, T]
+        attention_scale = swishmax(attention_logits, dim=-2)
+        # [..., K, Q, T]
+
+        value: torch.Tensor = self.to_value_attention(value_tokens)
+        # [..., K, T]
+        values_scaled = value.unsqueeze(-2) * attention_scale
+        # [..., K, Q, T] = [..., K, 1, T] * [..., K, Q, T]
+        value_sum = values_scaled.sum(-3)
+        # [..., Q, T]
+        value_out: torch.Tensor = self.to_value_out(value_sum)
         # [..., Q, T]
 
         return value_out
