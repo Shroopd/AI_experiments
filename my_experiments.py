@@ -45,7 +45,34 @@ class CompareMeta(nn.Module):
     pass
 
 
-class AttentionFractal(nn.Module):
+class FractalTransformer(nn.Module):
+    activate = nn.SiLU()
+
+    def __init__(self, dims, depth=5) -> None:
+        super().__init__()
+
+        self.dims = dims
+        self.depth = depth
+
+        self.before = self.recurse(dims, depth - 1)
+        self.middle = FractalAttention(dims, depth)
+        self.after = self.recurse(dims, depth - 1)
+
+    def recurse(self, dims, depth):
+        if depth >= 2:
+            return FractalTransformer(dims, depth)
+        else:
+            return LinearActivateZP(dims, dims, FractalTransformer.activate)
+
+    def forward(self, X):
+        X += self.before(X)
+        X += self.middle(X)
+        X += self.after(X)
+
+        return X
+
+
+class FractalAttention(nn.Module):
     def __init__(
         self,
         token_dims: int,
@@ -62,9 +89,9 @@ class AttentionFractal(nn.Module):
             self.to_attention_logits,
             self.to_value_out,
         ) = (
-            (nn.Linear(token_dims, token_dims) for _ in range(5))
+            (nn.Linear(token_dims, token_dims, bias=False) for _ in range(5))
             if shape_dims == 2
-            else (AttentionFractal(token_dims, shape_dims - 1) for _ in range(5))
+            else (FractalAttention(token_dims, shape_dims - 1) for _ in range(5))
         )
         self.row_dims = tuple(-3 - i for i in range(0, self.shape_dims))
         self.col_dims = tuple(-2 - i for i in range(0, self.shape_dims))
