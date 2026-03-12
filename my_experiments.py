@@ -553,7 +553,9 @@ class PosEncode(torch.nn.Module):
 class Conv2DAttention(nn.Module):
     # def __init__(self, *args, ) -> None:
     #     super().__init__(*args, )
-    def __init__(self, attention_block: AttentionZP) -> None:
+    def __init__(
+        self, attention_block: Callable[[Tensor, Tensor], Tensor]
+    ) -> None:
         super().__init__()
         self.attention = attention_block
         self.pad = nn.CircularPad2d(3 // 2)
