@@ -207,9 +207,7 @@ class AttentionDeduplicate(nn.Module):
 
         attention_raw: Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
         # [..., K, Q, T] = [..., K, 1, T] * [..., 1, Q, T]
-        attention_logits: Tensor = self.mask(
-            self.to_attention_logits(attention_raw)
-        )
+        attention_logits: Tensor = self.mask(self.to_attention_logits(attention_raw))
         # [..., K, Q, T]
         attention_scale = swishmax(attention_logits, dim=-2)
         # [..., K, Q, T]
@@ -281,9 +279,7 @@ class AttentionHeadless(nn.Module):
 
         attention_raw: Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
         # [..., K, Q, T] = [..., K, 1, T] * [..., 1, Q, T]
-        attention_logits: Tensor = self.mask(
-            self.to_attention_logits(attention_raw)
-        )
+        attention_logits: Tensor = self.mask(self.to_attention_logits(attention_raw))
         # [..., K, Q, T]
         attention_scale = swishmax(attention_logits, dim=-2)
         # [..., K, Q, T]
@@ -553,9 +549,7 @@ class PosEncode(torch.nn.Module):
 class Conv2DAttention(nn.Module):
     # def __init__(self, *args, ) -> None:
     #     super().__init__(*args, )
-    def __init__(
-        self, attention_block: Callable[[Tensor, Tensor], Tensor]
-    ) -> None:
+    def __init__(self, attention_block: Callable[[Tensor, Tensor], Tensor]) -> None:
         super().__init__()
         self.attention = attention_block
         self.pad = nn.CircularPad2d(3 // 2)
