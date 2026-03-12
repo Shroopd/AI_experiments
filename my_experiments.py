@@ -4,16 +4,9 @@ import math
 import torch
 from torch import nn
 from torch.nn.parameter import Parameter
-import sys
 
 from typing import Callable
 
-
-EPSILON = sys.float_info.epsilon
-"""A number that is very small, but not 0"""
-
-CLOSE_ENOUGH = 1e-4
-"""Small but not vanishingly so value, to determine if two values are almost equal"""
 
 NOT_EPSILON = 1
 """A number that isn't very small, and definitely not 0"""
@@ -29,30 +22,21 @@ def swishmax(input: torch.Tensor, dim, *, shrink_factor=None):
     return out
 
 
-def near_zero(input: torch.Tensor):
-    return CLOSE_ENOUGH > torch.max(torch.abs(input))
-
-
-def near_equal(a: torch.Tensor, b: torch.Tensor):
-    return near_zero(a - b)
+def subset_loss(input: torch.Tensor, target: torch.Tensor):
+    """loss function approaching zero as input approaches being a subset of target"""
 
 
 def make_weight(*dims: int):
     return Parameter(torch.randn(dims))
 
 
-class CompareMeta(nn.Module):
-    pass
-
-
 class FractalTransformer(nn.Module):
-    activate = nn.SiLU()
-
-    def __init__(self, dims, depth=5) -> None:
+    def __init__(self, dims, depth, module_1d: Callable[[int], nn.Module]) -> None:
         super().__init__()
 
         self.dims = dims
         self.depth = depth
+        self.module_1d = module_1d
 
         self.before = self.recurse(dims, depth - 1)
         self.middle = FractalAttention(dims, depth)
@@ -60,28 +44,27 @@ class FractalTransformer(nn.Module):
 
     def recurse(self, dims, depth):
         if depth >= 2:
-            return FractalTransformer(dims, depth)
+            return FractalTransformer(dims, depth, self.module_1d)
         else:
-            return LinearActivateZP(dims, dims, FractalTransformer.activate)
+            return self.module_1d(dims)
 
-    def forward(self, X):
+    def forward(self, X: torch.Tensor):
         X += self.before(X)
         X += self.middle(X)
         X += self.after(X)
-
         return X
 
 
 class FractalAttention(nn.Module):
     def __init__(
         self,
-        token_dims: int,
-        shape_dims: int,
+        dims: int,
+        depth: int,
     ) -> None:
         super().__init__()
-        self.token_dims = token_dims
-        self.shape_dims = shape_dims
-        assert shape_dims >= 1
+        self.dims = dims
+        self.depth = depth
+        assert depth >= 1
         (
             self.to_key,
             self.to_query,
@@ -89,23 +72,23 @@ class FractalAttention(nn.Module):
             self.to_attention_logits,
             self.to_value_out,
         ) = (
-            (nn.Linear(token_dims, token_dims, bias=False) for _ in range(5))
-            if shape_dims == 2
-            else (FractalAttention(token_dims, shape_dims - 1) for _ in range(5))
+            (nn.Linear(dims, dims, bias=False) for _ in range(5))
+            if depth == 2
+            else (FractalAttention(dims, depth - 1) for _ in range(5))
         )
-        self.row_dims = tuple(-3 - i for i in range(0, self.shape_dims))
-        self.col_dims = tuple(-2 - i for i in range(0, self.shape_dims))
+        self.row_dims = tuple(-3 - i for i in range(0, self.depth - 1))
+        self.col_dims = tuple(-2 - i for i in range(0, self.depth - 1))
 
-    def batchify(self, A: torch.Tensor, lhs: bool, current_shape_dims=None):
-        if current_shape_dims is None:
-            current_shape_dims = self.shape_dims
-        if current_shape_dims == 1:
+    def batchify(self, A: torch.Tensor, lhs: bool, current_depth=None):
+        if current_depth is None:
+            current_depth = self.depth
+        if current_depth == 1:
             return A
         else:
             return self.batchify(
-                A.unsqueeze((0 if lhs else -1) - current_shape_dims),
+                A.unsqueeze((0 if lhs else -1) - current_depth),
                 lhs,
-                current_shape_dims - 1,
+                current_depth - 1,
             )
 
     def forward(
@@ -125,22 +108,33 @@ class FractalAttention(nn.Module):
         # [..., Q, ...]
         key = key_tokens + self.to_key(key_tokens)
         # [..., K, ...]
-        value = value_tokens + self.to_value_attention(value_tokens)
-        # [..., K, ...]
 
         attention_raw = self.batchify(key, True) * self.batchify(query, False)
         # [..., K, Q, ..., T] = [..., K, 1, ..., T] * [..., 1, Q, ..., T]
+        del query, key
+
         attention_logits = attention_raw + self.to_attention_logits(attention_raw)
         # [..., K, Q, ..., T]
+        del attention_raw
+
         attention_scale = swishmax(attention_logits, dim=self.row_dims)
         # [...,^K, Q, ..., T]
+        del attention_logits
+
+        value = value_tokens + self.to_value_attention(value_tokens)
+        # [..., K, ...]
         values_scaled = self.batchify(value, True) * attention_scale
         # [..., K, Q, ...] = [..., K, 1, ...] * [..., K, Q, ...]
+        del value
+
         value_sum = values_scaled.sum(self.col_dims)
         # [..., Q, T]
+        del values_scaled
         value_out = value_sum + self.to_value_out(value_sum)
         # [..., Q, T]
+        del value_sum
 
+        print(self.depth, end="")
         return value_out
 
 
