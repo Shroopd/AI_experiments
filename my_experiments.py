@@ -4,6 +4,7 @@ import math
 import torch
 from torch import nn
 from torch.nn.parameter import Parameter
+from torch import Tensor
 
 from typing import Callable
 
@@ -12,7 +13,7 @@ NOT_EPSILON = 1
 """A number that isn't very small, and definitely not 0"""
 
 
-def swishmax(input: torch.Tensor, dim, *, shrink_factor=None):
+def swishmax(input: Tensor, dim, *, shrink_factor=None):
     xexp = input * torch.exp(input - torch.amax(input, dim=dim, keepdim=True))
     if shrink_factor is not None:
         xexp = xexp / shrink_factor
@@ -22,7 +23,7 @@ def swishmax(input: torch.Tensor, dim, *, shrink_factor=None):
     return out
 
 
-def subset_loss(input: torch.Tensor, target: torch.Tensor):
+def subset_loss(input: Tensor, target: Tensor):
     """loss function approaching zero as input approaches being a subset of target"""
 
 
@@ -48,7 +49,7 @@ class FractalTransformer(nn.Module):
         else:
             return self.module_1d(dims)
 
-    def forward(self, X: torch.Tensor):
+    def forward(self, X: Tensor):
         X += self.before(X)
         X += self.middle(X)
         X += self.after(X)
@@ -79,7 +80,7 @@ class FractalAttention(nn.Module):
         self.row_dims = tuple(-3 - i for i in range(0, self.depth - 1))
         self.col_dims = tuple(-2 - i for i in range(0, self.depth - 1))
 
-    def batchify(self, A: torch.Tensor, lhs: bool, current_depth=None):
+    def batchify(self, A: Tensor, lhs: bool, current_depth=None):
         if current_depth is None:
             current_depth = self.depth
         if current_depth == 1:
@@ -93,9 +94,9 @@ class FractalAttention(nn.Module):
 
     def forward(
         self,
-        query_tokens: torch.Tensor,
-        key_tokens: torch.Tensor | None = None,
-        value_tokens: torch.Tensor | None = None,
+        query_tokens: Tensor,
+        key_tokens: Tensor | None = None,
+        value_tokens: Tensor | None = None,
     ):
         if key_tokens is None:
             key_tokens = query_tokens
@@ -164,9 +165,9 @@ class AttentionDeduplicate(nn.Module):
 
     def forward(
         self,
-        query_tokens: torch.Tensor,
-        key_tokens: torch.Tensor | None = None,
-        value_tokens: torch.Tensor | None = None,
+        query_tokens: Tensor,
+        key_tokens: Tensor | None = None,
+        value_tokens: Tensor | None = None,
     ):
         """
         number of queries:  Q
@@ -179,6 +180,7 @@ class AttentionDeduplicate(nn.Module):
 
         batching and broadcasting for dimensions prior to last two
         """
+        raise NotImplementedError
 
         if key_tokens is None:
             key_tokens = query_tokens
@@ -186,9 +188,9 @@ class AttentionDeduplicate(nn.Module):
         if value_tokens is None:
             value_tokens = key_tokens
 
-        key: torch.Tensor = self.to_key(key_tokens)
+        key: Tensor = self.to_key(key_tokens)
         # [..., K, T]
-        query: torch.Tensor = self.to_query(query_tokens)
+        query: Tensor = self.to_query(query_tokens)
         # [..., Q, T]
 
         key_similarity = (
@@ -203,22 +205,22 @@ class AttentionDeduplicate(nn.Module):
             # [..., K, 1, 1]
         )
 
-        attention_raw: torch.Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
+        attention_raw: Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
         # [..., K, Q, T] = [..., K, 1, T] * [..., 1, Q, T]
-        attention_logits: torch.Tensor = self.mask(
+        attention_logits: Tensor = self.mask(
             self.to_attention_logits(attention_raw)
         )
         # [..., K, Q, T]
         attention_scale = swishmax(attention_logits, dim=-2)
         # [..., K, Q, T]
 
-        value: torch.Tensor = self.to_value_attention(value_tokens)
+        value: Tensor = self.to_value_attention(value_tokens)
         # [..., K, T]
         values_scaled = value.unsqueeze(-2) * attention_scale
         # [..., K, Q, T] = [..., K, 1, T] * [..., K, Q, T]
         value_sum = values_scaled.sum(-3)
         # [..., Q, T]
-        value_out: torch.Tensor = self.to_value_out(value_sum)
+        value_out: Tensor = self.to_value_out(value_sum)
         # [..., Q, T]
 
         return value_out
@@ -250,9 +252,9 @@ class AttentionHeadless(nn.Module):
 
     def forward(
         self,
-        query_tokens: torch.Tensor,
-        key_tokens: torch.Tensor | None = None,
-        value_tokens: torch.Tensor | None = None,
+        query_tokens: Tensor,
+        key_tokens: Tensor | None = None,
+        value_tokens: Tensor | None = None,
     ):
         """
         number of queries:  Q
@@ -272,27 +274,27 @@ class AttentionHeadless(nn.Module):
         if value_tokens is None:
             value_tokens = key_tokens
 
-        key: torch.Tensor = self.to_key(key_tokens)
+        key: Tensor = self.to_key(key_tokens)
         # [..., K, T]
-        query: torch.Tensor = self.to_query(query_tokens)
+        query: Tensor = self.to_query(query_tokens)
         # [..., Q, T]
 
-        attention_raw: torch.Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
+        attention_raw: Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
         # [..., K, Q, T] = [..., K, 1, T] * [..., 1, Q, T]
-        attention_logits: torch.Tensor = self.mask(
+        attention_logits: Tensor = self.mask(
             self.to_attention_logits(attention_raw)
         )
         # [..., K, Q, T]
         attention_scale = swishmax(attention_logits, dim=-2)
         # [..., K, Q, T]
 
-        value: torch.Tensor = self.to_value_attention(value_tokens)
+        value: Tensor = self.to_value_attention(value_tokens)
         # [..., K, T]
         values_scaled = value.unsqueeze(-2) * attention_scale
         # [..., K, Q, T] = [..., K, 1, T] * [..., K, Q, T]
         value_sum = values_scaled.sum(-3)
         # [..., Q, T]
-        value_out: torch.Tensor = self.to_value_out(value_sum)
+        value_out: Tensor = self.to_value_out(value_sum)
         # [..., Q, T]
 
         return value_out
@@ -330,9 +332,9 @@ class AttentionHeadless(nn.Module):
 
 #     def forward(
 #         self,
-#         query_tokens: torch.Tensor,
-#         key_tokens: torch.Tensor | None = None,
-#         value_tokens: torch.Tensor | None = None,
+#         query_tokens: Tensor,
+#         key_tokens: Tensor | None = None,
+#         value_tokens: Tensor | None = None,
 #     ):
 #         """
 #         number of queries:  Q
@@ -388,7 +390,7 @@ class AttentionZP(nn.Module):
         compress_size: int,
         bias_query: bool,
         return_attention: bool = False,
-        mask: Callable[[torch.Tensor], torch.Tensor] | None = None,
+        mask: Callable[[Tensor], Tensor] | None = None,
         dropout=0.0,
     ) -> None:
         super().__init__()
@@ -417,8 +419,8 @@ class AttentionZP(nn.Module):
 
     def forward(
         self,
-        query_tokens: torch.Tensor,
-        key_tokens: torch.Tensor | None = None,
+        query_tokens: Tensor,
+        key_tokens: Tensor | None = None,
     ):
         """
         number of queries:  Q
@@ -515,7 +517,7 @@ class LinearActivateZP(nn.Linear):
         )
         self.activation = activation
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: Tensor) -> Tensor:
         return self.activation(super().forward(input)) - self.activation(self.bias)
 
 
@@ -538,7 +540,7 @@ class PosEncode(torch.nn.Module):
         )
         self.I = torch.nn.Buffer(i_mult)
 
-    def forward(self, x) -> torch.Tensor:
+    def forward(self, x) -> Tensor:
         x = x.unsqueeze(-1)
         out_shape = list(x.size())
         out_shape[-1] = self.D * 2
@@ -556,7 +558,7 @@ class Conv2DAttention(nn.Module):
         self.attention = attention_block
         self.pad = nn.CircularPad2d(3 // 2)
 
-    def forward(self, image: torch.Tensor) -> torch.Tensor:
+    def forward(self, image: Tensor) -> Tensor:
         width = 3
 
         image = self.pad(image)
@@ -580,6 +582,6 @@ class Conv2DAttention(nn.Module):
 
         # print(keys,query)
 
-        outs, _ = self.attention.forward(keys, query)
+        outs, _ = self.attention.forward(query, keys)
 
         return outs.movedim(-1, 1)
