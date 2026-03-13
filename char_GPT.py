@@ -7,7 +7,7 @@ import my_experiments as mxp
 
 
 def mask(x: Tensor) -> Tensor:
-    return x
+    return x.triu(diagonal=1)
 
 
 class MLP(nn.Module):
