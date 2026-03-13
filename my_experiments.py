@@ -6,7 +6,7 @@ from torch import nn
 from torch.nn.parameter import Parameter
 from torch import Tensor
 
-from typing import Callable
+from typing import Callable, Iterable
 
 
 NOT_EPSILON = 1
@@ -32,16 +32,23 @@ def make_weight(*dims: int):
 
 
 class FractalTransformer(nn.Module):
-    def __init__(self, dims, depth, module_1d: Callable[[int], nn.Module]) -> None:
+    def __init__(
+        self,
+        dims: int,
+        depth: int,
+        module_1d: Callable[[int], nn.Module],
+        mask: Callable[[Tensor], Tensor] = nn.Identity(),
+    ) -> None:
         super().__init__()
 
         self.dims = dims
         self.depth = depth
         self.module_1d = module_1d
+        self.mask = mask
 
-        self.before = self.recurse(dims, depth - 1)
-        self.middle = FractalAttention(dims, depth)
-        self.after = self.recurse(dims, depth - 1)
+        self.pre = self.recurse(dims, depth - 1)
+        self.mid = FractalAttention(dims, depth)
+        self.end = self.recurse(dims, depth - 1)
 
     def recurse(self, dims, depth):
         if depth >= 2:
@@ -50,9 +57,9 @@ class FractalTransformer(nn.Module):
             return self.module_1d(dims)
 
     def forward(self, X: Tensor):
-        X += self.before(X)
-        X += self.middle(X)
-        X += self.after(X)
+        X += self.pre(X)
+        X += self.mid(X)
+        X += self.end(X)
         return X
 
 
@@ -61,6 +68,7 @@ class FractalAttention(nn.Module):
         self,
         dims: int,
         depth: int,
+        mask: Callable[[Tensor], Tensor] = nn.Identity(),
     ) -> None:
         super().__init__()
         self.dims = dims
@@ -75,10 +83,12 @@ class FractalAttention(nn.Module):
         ) = (
             (nn.Linear(dims, dims, bias=False) for _ in range(5))
             if depth == 2
-            else (FractalAttention(dims, depth - 1) for _ in range(5))
+            else (FractalAttention(dims, depth - 1, mask) for _ in range(5))
         )
         self.row_dims = tuple(-3 - i for i in range(0, self.depth - 1))
         self.col_dims = tuple(-2 - i for i in range(0, self.depth - 1))
+
+        self.mask = mask
 
     def batchify(self, A: Tensor, lhs: bool, current_depth=None):
         if current_depth is None:
@@ -110,30 +120,26 @@ class FractalAttention(nn.Module):
         key = key_tokens + self.to_key(key_tokens)
         # [..., K, ...]
 
-        attention_raw = self.batchify(key, True) * self.batchify(query, False)
+        attention_raw = self.mask(
+            self.batchify(key, True) * self.batchify(query, False)
+        )
         # [..., K, Q, ..., T] = [..., K, 1, ..., T] * [..., 1, Q, ..., T]
-        del query, key
 
         attention_logits = attention_raw + self.to_attention_logits(attention_raw)
         # [..., K, Q, ..., T]
-        del attention_raw
 
         attention_scale = swishmax(attention_logits, dim=self.row_dims)
         # [...,^K, Q, ..., T]
-        del attention_logits
 
         value = value_tokens + self.to_value_attention(value_tokens)
         # [..., K, ...]
         values_scaled = self.batchify(value, True) * attention_scale
         # [..., K, Q, ...] = [..., K, 1, ...] * [..., K, Q, ...]
-        del value
 
         value_sum = values_scaled.sum(self.col_dims)
         # [..., Q, T]
-        del values_scaled
         value_out = value_sum + self.to_value_out(value_sum)
         # [..., Q, T]
-        del value_sum
 
         print(self.depth, end="")
         return value_out
@@ -228,7 +234,7 @@ class AttentionHeadless(nn.Module):
     def __init__(
         self,
         dims: int,
-        mask: nn.Module = nn.Identity(),
+        mask: Callable[[Tensor], Tensor] = nn.Identity(),
         *,
         key_bias=False,
         query_bias=False,
@@ -544,6 +550,17 @@ class PosEncode(torch.nn.Module):
         out[..., 0::2] = torch.sin(x * self.I)
         out[..., 1::2] = torch.cos(x * self.I)
         return out
+
+
+class ConvAttention(nn.Module):
+    """Channel last convention"""
+
+    def __init__(
+        self, conv_dims: Iterable[int], attention: Callable[[Tensor, Tensor], Tensor]
+    ) -> None:
+        super().__init__()
+        self.conv_dims = conv_dims
+        self.attention = attention
 
 
 class Conv2DAttention(nn.Module):
