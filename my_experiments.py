@@ -108,6 +108,8 @@ class FractalAttention(nn.Module):
         query_tokens: Tensor,
         key_tokens: Tensor | None = None,
         value_tokens: Tensor | None = None,
+        *,
+        return_attention=False,
     ):
         if key_tokens is None:
             key_tokens = query_tokens
@@ -143,7 +145,10 @@ class FractalAttention(nn.Module):
         # [..., Q, T]
 
         # print(self.depth, end="")
-        return value_out
+        if return_attention:
+            return value_out, attention_scale, attention_raw
+        else:
+            return value_out
 
 
 class AttentionDeduplicate(nn.Module):
