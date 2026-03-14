@@ -3,6 +3,7 @@ import math
 
 import torch
 from torch import nn
+from torch.nn import functional as ff
 from torch.nn.parameter import Parameter
 from torch import Tensor
 
@@ -57,9 +58,9 @@ class FractalTransformer(nn.Module):
             return self.module_1d(dims)
 
     def forward(self, X: Tensor):
-        X += self.pre(X)
-        X += self.mid(X)
-        X += self.end(X)
+        X = self.pre(X)
+        X = X + self.mid(X)
+        X = self.end(X)
         return X
 
 
@@ -141,7 +142,7 @@ class FractalAttention(nn.Module):
         value_out = value_sum + self.to_value_out(value_sum)
         # [..., Q, T]
 
-        print(self.depth, end="")
+        # print(self.depth, end="")
         return value_out
 
 
@@ -500,7 +501,7 @@ class NaiveUnaryZP(nn.Module):
         return self.centered_module(x) - self.output_zero
 
 
-class LinearActivateZP(nn.Linear):
+class LinearActivateZP(nn.Module):
     """
     Linear with bias but it's a zero preserving unary function
     """
@@ -510,17 +511,35 @@ class LinearActivateZP(nn.Linear):
         in_features: int,
         out_features: int,
         activation: nn.Module,
-        # bias: bool = True,
-        device=None,
-        dtype=None,
     ) -> None:
-        super().__init__(
-            in_features, out_features, bias=True, device=device, dtype=dtype
-        )
+        super().__init__()
+
+        self.bias = nn.Parameter(torch.randn(out_features))
+        self.linear = nn.Linear(in_features, out_features, False)
         self.activation = activation
 
     def forward(self, input: Tensor) -> Tensor:
-        return self.activation(super().forward(input)) - self.activation(self.bias)
+
+        return self.activation(self.linear(input) + self.bias) - self.activation(
+            self.bias
+        )
+
+
+class Swishmoid(nn.Module):
+    def __init__(
+        self,
+        dims: int,
+        factors: int,
+    ) -> None:
+        super().__init__()
+        self.bias = nn.Parameter(torch.randn(dims, factors))
+        self.scale = nn.Parameter(torch.randn(dims, factors))
+        self.factors = factors
+
+    def forward(self, X: Tensor) -> Tensor:
+        return ff.tanh(X) * torch.prod(
+            ff.tanh(X.unsqueeze(-1) * self.scale) + self.bias, dim=-1
+        )
 
 
 class PosEncode(torch.nn.Module):
@@ -542,7 +561,7 @@ class PosEncode(torch.nn.Module):
         )
         self.I = torch.nn.Buffer(i_mult)
 
-    def forward(self, x) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         x = x.unsqueeze(-1)
         out_shape = list(x.size())
         out_shape[-1] = self.D * 2
