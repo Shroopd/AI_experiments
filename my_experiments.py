@@ -15,6 +15,7 @@ NOT_EPSILON = 1
 
 
 def swishmax(input: Tensor, dim, *, shrink_factor=None):
+    "shrink_factor is used to divide the xe^x before normalizing"
     xexp = input * torch.exp(input - torch.amax(input, dim=dim, keepdim=True))
     if shrink_factor is not None:
         xexp = xexp / shrink_factor
@@ -22,6 +23,10 @@ def swishmax(input: Tensor, dim, *, shrink_factor=None):
         xexp, (torch.sum(torch.abs(xexp), dim=dim, keepdim=True) + NOT_EPSILON)
     )
     return out
+
+
+def mask2d(x: Tensor) -> Tensor:
+    return x.movedim(-1, 0).triu(diagonal=0).movedim(0, -1)
 
 
 def subset_loss(input: Tensor, target: Tensor):
@@ -39,6 +44,7 @@ class FractalTransformer(nn.Module):
         depth: int,
         module_1d: Callable[[int], nn.Module],
         mask: Callable[[Tensor], Tensor] = nn.Identity(),
+        pos_encoder: Callable[[Tensor, Tensor], Tensor] = nn.Identity(),
     ) -> None:
         super().__init__()
 
@@ -46,20 +52,28 @@ class FractalTransformer(nn.Module):
         self.depth = depth
         self.module_1d = module_1d
         self.mask = mask
+        self.pos_encoder = pos_encoder
 
         self.pre = self.recurse(dims, depth - 1)
-        self.mid = FractalAttention(dims, depth)
+        self.mid = FractalAttention(dims, depth, mask=self.mask)
         self.end = self.recurse(dims, depth - 1)
 
     def recurse(self, dims, depth):
         if depth >= 2:
-            return FractalTransformer(dims, depth, self.module_1d)
+            return FractalTransformer(dims, depth, self.module_1d, self.mask)
         else:
             return self.module_1d(dims)
 
     def forward(self, X: Tensor):
         X = self.pre(X)
-        X = X + self.mid(X)
+        X = X + self.mid(
+            self.pos_encoder(
+                X,
+                torch.arange(X.shape[-2], device=X.device)
+                .broadcast_to(X.shape[:-1])
+                .unsqueeze(-1),
+            )
+        )
         X = self.end(X)
         return X
 
@@ -139,7 +153,7 @@ class FractalAttention(nn.Module):
         values_scaled = self.batchify(value, True) * attention_scale
         # [..., K, Q, ...] = [..., K, 1, ...] * [..., K, Q, ...]
 
-        value_sum = values_scaled.sum(self.col_dims)
+        value_sum = values_scaled.sum(self.row_dims)
         # [..., Q, T]
         value_out = value_sum + self.to_value_out(value_sum)
         # [..., Q, T]
@@ -179,7 +193,6 @@ class AttentionDeduplicate(nn.Module):
         self,
         query_tokens: Tensor,
         key_tokens: Tensor | None = None,
-        value_tokens: Tensor | None = None,
     ):
         """
         number of queries:  Q
@@ -192,13 +205,9 @@ class AttentionDeduplicate(nn.Module):
 
         batching and broadcasting for dimensions prior to last two
         """
-        raise NotImplementedError
 
         if key_tokens is None:
             key_tokens = query_tokens
-
-        if value_tokens is None:
-            value_tokens = key_tokens
 
         key: Tensor = self.to_key(key_tokens)
         # [..., K, T]
@@ -206,27 +215,29 @@ class AttentionDeduplicate(nn.Module):
         # [..., Q, T]
 
         key_similarity = (
-            torch.cosine_similarity(key.unsqueeze(-2), key.unsqueeze(-3), dim=-1)
+            ff.cosine_similarity(key.unsqueeze(-2), key.unsqueeze(-3), dim=-1)
             # [..., K, K]
             .pow(2)
-            .sum(-1)
-            # [..., K]
-            .unsqueeze(-1)
+            .sum(-1, keepdim=True)
             # [..., K, 1]
             .unsqueeze(-1)
             # [..., K, 1, 1]
         )
 
-        attention_raw: Tensor = key.unsqueeze(-2) * query.unsqueeze(-3)
+        attention_raw: Tensor = self.mask(key.unsqueeze(-2) * query.unsqueeze(-3))
         # [..., K, Q, T] = [..., K, 1, T] * [..., 1, Q, T]
-        attention_logits: Tensor = self.mask(self.to_attention_logits(attention_raw))
+        attention_logits: Tensor = self.to_attention_logits(attention_raw)
         # [..., K, Q, T]
-        attention_scale = swishmax(attention_logits, dim=-2)
+        attention_scale = swishmax(
+            attention_logits,
+            dim=-2,
+            shrink_factor=key_similarity,
+        )
         # [..., K, Q, T]
 
-        value: Tensor = self.to_value_attention(value_tokens)
+        value_raw: Tensor = self.to_value_attention(key)
         # [..., K, T]
-        values_scaled = value.unsqueeze(-2) * attention_scale
+        values_scaled = value_raw.unsqueeze(-2) * attention_scale
         # [..., K, Q, T] = [..., K, 1, T] * [..., K, Q, T]
         value_sum = values_scaled.sum(-3)
         # [..., Q, T]
@@ -236,7 +247,7 @@ class AttentionDeduplicate(nn.Module):
         return value_out
 
 
-class AttentionHeadless(nn.Module):
+class HeadlessAttention(nn.Module):
     def __init__(
         self,
         dims: int,
@@ -308,6 +319,7 @@ class AttentionHeadless(nn.Module):
         return value_out
 
 
+"""
 # class AttentionMono(nn.Module):
 #     def __init__(
 #         self,
@@ -344,7 +356,7 @@ class AttentionHeadless(nn.Module):
 #         key_tokens: Tensor | None = None,
 #         value_tokens: Tensor | None = None,
 #     ):
-#         """
+#         " " "
 #         number of queries:  Q
 #         length of queries:  QT
 #         number of keys:     K
@@ -354,7 +366,7 @@ class AttentionHeadless(nn.Module):
 #         key_tokens.shape    [..., K, T]
 
 #         batching and broadcasting for dimensions prior to last two
-#         """
+#         " " "
 
 #         if key_tokens is None:
 #             key_tokens = query_tokens
@@ -384,6 +396,7 @@ class AttentionHeadless(nn.Module):
 #         # [..., Q, T]
 
 #         return value_out
+"""
 
 
 class AttentionZP(nn.Module):
@@ -547,7 +560,90 @@ class Swishmoid(nn.Module):
         )
 
 
-class PosEncode(torch.nn.Module):
+class RotPosEncode(nn.Module):
+    def __init__(
+        self,
+        dims: int,
+        position_dims: int,
+        min_wavelength: float,
+        max_wavelength: float,
+    ) -> None:
+        super().__init__()
+
+        self.position_dims = position_dims
+
+        self.features_per_step = 2 * position_dims
+
+        self.steps = dims // self.features_per_step
+
+        self.unused_dims = dims - self.steps * self.features_per_step
+
+        self.last_pos = None
+
+        i_range = torch.arange(0, self.steps)
+        # [steps]
+
+        i_mult = (
+            (2 * math.pi)
+            * ((max_wavelength / min_wavelength) ** (i_range / (self.steps - 1)))
+            / max_wavelength
+        )
+        self.scale_sequence = nn.Buffer(i_mult)
+        # [steps]
+
+    def forward(self, X: Tensor, pos: Tensor | None) -> Tensor:
+        """
+        Argument shapes:
+        ```
+        X   = [B..., B, T]
+        pos = [B..., B, pos_dims]
+        """
+        out = torch.empty_like(X)
+        # [B..., T]
+
+        view_shape = list(out.shape)
+        view_shape.pop()
+        view_shape.append(self.steps)
+        view_shape.append(self.position_dims)
+        view_shape.append(2)
+        # [B..., steps, pos_dims, 2]
+
+        X_view = X[..., self.unused_dims :].view(view_shape)
+        # [B..., steps, pos_dims, 2]
+
+        out_view = out[..., self.unused_dims :].view(view_shape)
+        # [B..., steps, pos_dims, 2]
+
+        if pos is not None:  # nested for type check
+            if self.last_pos is None or pos.equal(self.last_pos):
+                self.last_pos = pos
+                # [B..., pos_dims]
+
+                pos_view = pos.unsqueeze(-2)
+                # [B..., 1, pos_dims]
+
+                self.cos_factor = torch.cos(
+                    pos_view * self.scale_sequence.unsqueeze(-1)
+                )
+                self.sin_factor = torch.sin(
+                    pos_view * self.scale_sequence.unsqueeze(-1)
+                )
+                # [B..., steps, pos_dims] = [B..., 1, pos_dims] * [steps, 1]
+        # print(pos.shape, self.cos_factor.shape)
+
+        out_view[..., 0] = (
+            X_view[..., 0] * self.cos_factor + X_view[..., 1] * self.sin_factor
+        )
+        out_view[..., 1] = (
+            X_view[..., 1] * self.cos_factor - X_view[..., 0] * self.sin_factor
+        )
+
+        out[..., : self.unused_dims] = X[..., : self.unused_dims]
+
+        return out
+
+
+class SineEncoding(torch.nn.Module):
     def __init__(
         self,
         dim_pairs: int,
