@@ -251,23 +251,21 @@ class HeadlessAttention(nn.Module):
     def __init__(
         self,
         dims: int,
-        mask: Callable[[Tensor], Tensor] = nn.Identity(),
         *,
-        key_bias=False,
-        query_bias=False,
-        value_attention_bias=False,
-        attention_logits_bias=False,
-        value_out_bias=False,
+        mask: Callable[[Tensor], Tensor] = nn.Identity(),
+        module_factory: Callable[[int], nn.Module] = (
+            lambda dims: nn.Linear(dims, dims, False)
+        ),
     ) -> None:
         super().__init__()
 
-        # fmt:off
-        self.to_key              = nn.Linear(dims, dims, key_bias)
-        self.to_query            = nn.Linear(dims, dims, query_bias)
-        self.to_value_attention  = nn.Linear(dims, dims, value_attention_bias)
-        self.to_attention_logits = nn.Linear(dims, dims, attention_logits_bias)
-        self.to_value_out        = nn.Linear(dims, dims, value_out_bias)
-        # fmt:on
+        (
+            self.to_key,
+            self.to_query,
+            self.to_value_attention,
+            self.to_attention_logits,
+            self.to_value_out,
+        ) = (module_factory(dims) for _ in range(5))
 
         self.mask = mask
 
@@ -317,86 +315,6 @@ class HeadlessAttention(nn.Module):
         # [..., Q, T]
 
         return value_out
-
-
-"""
-# class AttentionMono(nn.Module):
-#     def __init__(
-#         self,
-#         token_size: int,
-#         attention_size: int,
-#         mask: nn.Module = nn.Identity(),
-#         *,
-#         key_bias=False,
-#         query_bias=False,
-#         value_bias=False,
-#         attention_bias=False,
-#         value_up_bias=False,
-#         key_down=None,
-#         query_down=None,
-#         value_down=None,
-#         attention_over=None,
-#         value_up=None,
-#     ) -> None:
-#         super().__init__()
-
-#         # fmt:off
-#         self.key_down       = key_down       or nn.Linear(token_size,     attention_size, key_bias)
-#         self.query_down     = query_down     or nn.Linear(token_size,     attention_size, query_bias)
-#         self.value_down     = value_down     or nn.Linear(token_size,     attention_size, value_bias)
-#         self.attention_over = attention_over or nn.Linear(attention_size, attention_size, attention_bias)
-#         self.value_up       = value_up       or nn.Linear(attention_size, token_size,     value_up_bias)
-#         # fmt:on
-
-#         self.mask = mask
-
-#     def forward(
-#         self,
-#         query_tokens: Tensor,
-#         key_tokens: Tensor | None = None,
-#         value_tokens: Tensor | None = None,
-#     ):
-#         " " "
-#         number of queries:  Q
-#         length of queries:  QT
-#         number of keys:     K
-#         length of keys:     KT
-
-#         query_tokens.shape  [..., Q, T]
-#         key_tokens.shape    [..., K, T]
-
-#         batching and broadcasting for dimensions prior to last two
-#         " " "
-
-#         if key_tokens is None:
-#             key_tokens = query_tokens
-
-#         if value_tokens is None:
-#             value_tokens = key_tokens
-
-#         key = self.key_down(key_tokens)
-#         # [..., K, A]
-#         query = self.query_down(query_tokens)
-#         # [..., Q, A]
-
-#         attention_raw = key.unsqueeze(-2) * query.unsqueeze(-3)
-#         # [..., K, Q, A] = [..., K, 1, A] * [..., 1, Q, A]
-#         attention_logits = self.mask(self.attention_over(attention_raw))
-#         # [..., K, Q, A]
-#         attention_scale = swishmax(attention_logits, dim=-2)
-#         # [..., K, Q, A]
-
-#         value = self.value_down(value_tokens)
-#         # [..., K, A]
-#         values_scaled = value.unsqueeze(-2) * attention_scale
-#         # [..., K, Q, A] = [..., K, 1, A] * [..., K, Q, A]
-#         value_sum = values_scaled.sum(-3)
-#         # [..., Q, A]
-#         value_out = self.value_up(value_sum)
-#         # [..., Q, T]
-
-#         return value_out
-"""
 
 
 class AttentionZP(nn.Module):
@@ -501,22 +419,6 @@ class AttentionZP(nn.Module):
         #     return value_shift, attention_logits
         # else:
         return self.dropout(value_shift)
-
-
-class NaiveUnaryZP(nn.Module):
-    def __init__(self, module: nn.Module) -> None:
-        super().__init__()
-        self.centered_module = module
-        self.output_zero = None
-        self.h = self.centered_module.register_full_backward_hook(self.reset)
-
-    def reset(self, *_):
-        self.output_zero = None
-
-    def forward(self, x):
-        if self.output_zero is None:
-            self.output_zero = self.centered_module.forward(torch.zeros_like(x))
-        return self.centered_module(x) - self.output_zero
 
 
 class LinearActivateZP(nn.Module):
