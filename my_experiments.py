@@ -445,6 +445,20 @@ class LinearActivateZP(nn.Module):
         )
 
 
+class MultiplyPair(nn.Module):
+    def __init__(
+        self,
+        A: Callable[[Tensor], Tensor],
+        B: Callable[[Tensor], Tensor],
+    ) -> None:
+        super().__init__()
+        self.a = A
+        self.b = B
+
+    def forward(self, X):
+        return self.a(X) * self.b(X)
+
+
 class Swishmoid(nn.Module):
     def __init__(
         self,
@@ -574,15 +588,38 @@ class SineEncoding(torch.nn.Module):
         return out
 
 
-class ConvAttention(nn.Module):
+class ConvNDAttention(nn.Module):
     """Channel last convention"""
 
     def __init__(
-        self, conv_dims: Iterable[int], attention: Callable[[Tensor, Tensor], Tensor]
+        self,
+        conv_dims: Iterable[int],
+        radius: Iterable[int],
+        step: Iterable[int],
+        attention: Callable[[Tensor, Tensor], Tensor],
     ) -> None:
+        """`conv_dims` must be all negative"""
         super().__init__()
-        self.conv_dims = conv_dims
+        self.conv_dims = tuple(conv_dims)
+        assert all((i < 0) for i in self.conv_dims)
+        self.radius = radius
+        self.step = step
+        # self.conv_dims = (self.conv_dims[i] - i for i in range(len(self.conv_dims)))
         self.attention = attention
+
+    def forward(self, X: Tensor):
+        original_shape = X.size()
+        for i, r, s in self.conv_dims, self.radius, self.step:
+            X = X.unfold(i, 1 + 2 * r, s)
+            X = X.movedim(-1, 0)
+        X = X.reshape([-1] + list(X.shape[: -len(original_shape)]))
+        cell_count = X.shape[-1]
+        center = cell_count // 2
+
+        query = X[center : center + 1].movedim(0, -2)
+        key = torch.cat((X[:center], X[center + 1 :])).movedim(0, -2)
+
+        return self.attention(query, key).squeeze(-2)
 
 
 class Conv2DAttention(nn.Module):
