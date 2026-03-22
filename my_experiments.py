@@ -494,7 +494,9 @@ class RotPosEncode(nn.Module):
 
         self.unused_dims = dims - self.steps * self.features_per_step
 
-        self.last_pos = None
+        self.last_pos = nn.Buffer()
+        self.sin_factor = nn.Buffer()
+        self.cos_factor = nn.Buffer()
 
         i_range = torch.arange(0, self.steps)
         # [steps]
@@ -538,10 +540,10 @@ class RotPosEncode(nn.Module):
                 pos_view = pos.unsqueeze(-2)
                 # [B..., 1, pos_dims]
 
-                self.cos_factor = torch.cos(
+                self.sin_factor = torch.sin(
                     pos_view * self.scale_sequence.unsqueeze(-1)
                 )
-                self.sin_factor = torch.sin(
+                self.cos_factor = torch.cos(
                     pos_view * self.scale_sequence.unsqueeze(-1)
                 )
                 # [B..., steps, pos_dims] = [B..., 1, pos_dims] * [steps, 1]
