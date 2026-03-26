@@ -14,7 +14,9 @@ NOT_EPSILON = 1
 """A number that isn't very small, and definitely not 0"""
 
 
-def swishmax(input: Tensor, dim, *, shrink_factor=None):
+def swishmax(
+    input: Tensor, dim: torch.types._size | int = -1, *, shrink_factor=None
+) -> Tensor:
     "shrink_factor is used to divide the xe^x before normalizing"
     xexp = input * torch.exp(input - torch.amax(input, dim=dim, keepdim=True))
     if shrink_factor is not None:
@@ -23,6 +25,11 @@ def swishmax(input: Tensor, dim, *, shrink_factor=None):
         xexp, (torch.sum(torch.abs(xexp), dim=dim, keepdim=True) + NOT_EPSILON)
     )
     return out
+
+
+def sillog(X: Tensor) -> Tensor:
+    log_X = X.abs().log1p()
+    return X.sigmoid() * log_X.where(X > 0, X)
 
 
 def mask2d(x: Tensor) -> Tensor:
