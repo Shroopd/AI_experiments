@@ -109,18 +109,14 @@ class FractalAttention(nn.Module):
         self.depth = depth
         assert depth >= 1
         (
-            self.to_key,
             self.to_query,
-            self.to_value_attention,
+            self.to_key,
+            self.to_value,
             self.to_attention_logits,
             self.to_value_out,
         ) = (
-            (attention_1d(dims) for _ in range(5))
-            if depth == 2
-            else (
-                FractalAttention(dims, depth - 1, mask=mask, attention_1d=attention_1d)
-                for _ in range(5)
-            )
+            (attention_1d(dims)) if depth == 2 else (FractalAttention(dims, depth - 1, mask=mask, attention_1d=attention_1d))
+            for _ in range(5)
         )
         self.row_dims = tuple(-3 - i for i in range(0, self.depth - 1))
         self.col_dims = tuple(-2 - i for i in range(0, self.depth - 1))
@@ -167,22 +163,22 @@ class FractalAttention(nn.Module):
         attention_logits = attention_raw + self.to_attention_logits(attention_raw)
         # [..., K, Q, ..., T]
 
-        attention_scale = swishmax(attention_logits, dim=self.row_dims)
+        attention_selection = swishmax(attention_logits, dim=self.row_dims)
         # [...,^K, Q, ..., T]
 
-        value = value_tokens + self.to_value_attention(value_tokens)
+        value = value_tokens + self.to_value(value_tokens)
         # [..., K, ...]
-        values_scaled = self.batchify(value, True) * attention_scale
+        value_selected = self.batchify(value, True) * attention_selection
         # [..., K, Q, ...] = [..., K, 1, ...] * [..., K, Q, ...]
 
-        value_sum = values_scaled.sum(self.row_dims)
+        value_sum = value_selected.sum(self.row_dims)
         # [..., Q, T]
         value_out = value_sum + self.to_value_out(value_sum)
         # [..., Q, T]
 
         # print(self.depth, end="")
         if return_attention:
-            return value_out, attention_scale, attention_raw
+            return value_out, attention_selection, attention_raw
         else:
             return value_out
 
