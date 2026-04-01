@@ -74,10 +74,10 @@ class FractalTransformer(nn.Module):
         self.end = self.recurse(dims, depth - 1)
 
     def recurse(self, dims, depth):
-        if depth >= 2:
-            return FractalTransformer(dims, depth, self.module_1d, mask=self.mask)
-        else:
+        if depth == 1:
             return self.module_1d(dims)
+        else:
+            return FractalTransformer(dims, depth, self.module_1d, mask=self.mask)
 
     def forward(self, X: Tensor):
         X = self.pre(X)
@@ -107,7 +107,7 @@ class FractalAttention(nn.Module):
         super().__init__()
         self.dims = dims
         self.depth = depth
-        assert depth >= 1
+        assert depth >= 2, "Go use a proper 1d module instead of trying FractalAttention 1D, I haven't set up a factory yet"
         (
             self.to_query,
             self.to_key,
