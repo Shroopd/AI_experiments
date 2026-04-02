@@ -13,6 +13,8 @@ from typing import Callable, Iterable
 NOT_EPSILON = 1
 """A number that isn't very small, and definitely not 0"""
 
+# NOTE: TEST CHANGE
+
 
 def swishmax(
     input: Tensor, dim: torch.types._size | int = -1, *, shrink_factor=None
@@ -107,7 +109,9 @@ class FractalAttention(nn.Module):
         super().__init__()
         self.dims = dims
         self.depth = depth
-        assert depth >= 2, "Go use a proper 1d module instead of trying FractalAttention 1D, I haven't set up a factory yet"
+        assert depth >= 2, (
+            "Go use a proper 1d module instead of trying FractalAttention 1D, I haven't set up a factory yet"
+        )
         (
             self.to_query,
             self.to_key,
@@ -115,7 +119,11 @@ class FractalAttention(nn.Module):
             self.to_attention_logits,
             self.to_value_out,
         ) = (
-            (attention_1d(dims)) if depth == 2 else (FractalAttention(dims, depth - 1, mask=mask, attention_1d=attention_1d))
+            (attention_1d(dims))
+            if depth == 2
+            else (
+                FractalAttention(dims, depth - 1, mask=mask, attention_1d=attention_1d)
+            )
             for _ in range(5)
         )
         self.row_dims = tuple(-3 - i for i in range(0, self.depth - 1))
