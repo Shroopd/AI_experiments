@@ -680,6 +680,6 @@ class Conv2DAttention(nn.Module):
 
         # print(keys,query)
 
-        outs, _ = self.attention.forward(query, keys)
+        outs, _ = self.attention(query, keys)
 
         return outs.movedim(-1, 1)
