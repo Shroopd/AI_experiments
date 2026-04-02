@@ -13,8 +13,6 @@ from typing import Callable, Iterable
 NOT_EPSILON = 1
 """A number that isn't very small, and definitely not 0"""
 
-# NOTE: TEST CHANGE
-
 
 def swishmax(
     input: Tensor, dim: torch.types._size | int = -1, *, shrink_factor=None
