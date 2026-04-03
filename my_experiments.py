@@ -12,8 +12,6 @@ from torch import Tensor
 NOT_EPSILON = 1
 """A number that isn't very small, and definitely not 0"""
 
-# NOTE: TEST CHANGE
-
 
 def swishmax(
     input: Tensor, dim: torch.types._size | int = -1, *, shrink_factor=None
@@ -717,6 +715,6 @@ class Conv2DAttention(nn.Module):
 
         # print(keys,query)
 
-        outs, _ = self.attention.forward(query, keys)
+        outs, _ = self.attention(query, keys)
 
         return outs.movedim(-1, 1)
