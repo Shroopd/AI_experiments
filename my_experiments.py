@@ -1,14 +1,13 @@
-# from __future__ import annotations
+from __future__ import annotations
+
 import math
+from typing import Callable, Iterable
 
 import torch
 from torch import nn
 from torch.nn import functional as ff
 from torch.nn.parameter import Parameter
 from torch import Tensor
-
-from typing import Callable, Iterable
-
 
 NOT_EPSILON = 1
 """A number that isn't very small, and definitely not 0"""
@@ -34,12 +33,48 @@ def sillog(X: Tensor) -> Tensor:
     return X.sigmoid() * log_X.where(X > 0, X)
 
 
-def mask2d(x: Tensor) -> Tensor:
-    return x.movedim(-1, 0).triu(diagonal=0).movedim(0, -1)
+def mask2d(X: Tensor) -> Tensor:
+    return X.movedim(-1, 0).triu(diagonal=0).movedim(0, -1)
 
 
 def subset_loss(input: Tensor, target: Tensor):
     """loss function approaching zero as input approaches being a subset of target"""
+    raise NotImplementedError
+
+
+# def orthogonality_loss(X: Tensor) -> Tensor:
+#     raise NotImplementedError
+
+
+# def permutation_loss(X: Tensor) -> Tensor:
+#     XP = X.pow(2)
+#     a = (XP.sum(-1) - 1).pow(2)
+#     b = (XP.sum(-2) - 1).pow(2)
+#     # c = ((X - 0.5).abs() - 0.5).abs()
+#     c = (XP - X).pow(2)
+#     # return c.mean()
+#     return (a.sum() + b.sum() + c.sum()) / (a.numel() + b.numel() + c.numel())
+
+
+# def permutation_loss(X: Tensor) -> Tensor:
+#     XP = X.abs()
+#     # a = (X.abs().sum(-1) - 1).abs()
+#     # b = (X.abs().sum(-2) - 1).abs()
+#     c = (XP @ XP.mT).fill_diagonal_(0)
+#     return (c + (XP - X)).mean()
+
+
+def generalized_permutation_matrix_loss(val: Tensor) -> Tensor:
+    val = val.abs()
+    a, b = (
+        torch.cosine_similarity(X.unsqueeze(-2), X.unsqueeze(-3)) for X in (val, val.mT)
+    )
+    return ((a + b) / 2).mean()
+
+
+class GeneralizedPermutationMatrixLoss(nn.Module):
+    def forward(self, X):
+        return generalized_permutation_matrix_loss(X)
 
 
 def make_weight(*dims: int):
