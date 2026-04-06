@@ -53,6 +53,25 @@ def silulog(X: Tensor, max_derivative: int = 2) -> Tensor:
     # )
 
 
+def recursive_meta_loss(
+    X: Tensor, target_score: Tensor, error_normalizer: Callable[[Tensor], Tensor]
+):
+    """
+    Input is a vector of recursive loss predictions.
+    When training, the prediction model should try to decrease all meta_loss values,\n
+    while the action model should try to increase all output values from the prediction model.
+    """
+
+    errors = torch.zeros_like(X)
+    errors[..., 0] = X[..., 0] - target_score
+
+    with torch.no_grad():
+        for i in range(1, X.shape[-1]):
+            errors[..., i] = X[..., i] - error_normalizer(errors[..., i - 1])
+
+    return error_normalizer(X - error_normalizer(errors))
+
+
 class Silulog(nn.Module):
     def __init__(self, differentiability: int = 2) -> None:
         super().__init__()
