@@ -16,12 +16,9 @@ class MLP(nn.Module):
     def __init__(self, dims: int):
         super().__init__()
         self.all = nn.Sequential(
-            # mxp.LinearActivateZP(dims, dims * 2, nn.SiLU()),
             nn.Linear(dims, dims * 2, False),
-            mxp.Swishmoid(dims * 2, 1),
+            mxp.Silulog(),
             nn.Linear(2 * dims, dims, False),
-            # nn.Tanh(),
-            # nn.Linear(dims, False),
         )
 
     def forward(self, X):
