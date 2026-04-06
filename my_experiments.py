@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable
 
 import torch
 from torch import nn
@@ -26,17 +26,41 @@ def swishmax(
     return out
 
 
-def silulog(X: Tensor) -> Tensor:
-    """Combination of SiLU with log1p, with continuous 1st, 2nd, 3rd derivatives: https://www.desmos.com/calculator/rat8ushmma"""
+def silulog(X: Tensor, max_derivative: int = 2) -> Tensor:
+    """
+    Combination of SiLU with log1p, with selectable differentiability.\n
+    Done by substituting the x in x * sigmoid with ln(~e^x),
+    where ~e^x is a finite approximation of e^x.\n
+    See: https://www.desmos.com/calculator/dibje7r3li
+    """
+    assert not (max_derivative < 1)
 
     return X.sigmoid() * X.where(
-        X <= 0, (X + X.pow(2).div(2) + X.pow(3).div(6)).log1p()
+        X <= 0,
+        torch.stack(
+            (torch.ones_like(X),)
+            + tuple(
+                X.pow(i).div(math.factorial(i)) for i in range(1, max_derivative + 1)
+            )
+        )
+        .sum(0)
+        .log1p(),
     )
+
+    # """Combination of SiLU with log1p, with continuous 1st, 2nd, 3rd derivatives: https://www.desmos.com/calculator/rat8ushmma"""
+    # return X.sigmoid() * X.where(
+    #     X <= 0, (X + X.pow(2).div(2) + X.pow(3).div(6)).log1p()
+    # )
 
 
 class Silulog(nn.Module):
+    def __init__(self, differentiability: int = 2) -> None:
+        super().__init__()
+        assert differentiability >= 1
+        self.differentiability = differentiability
+
     def forward(self, X):
-        return silulog(X)
+        return silulog(X, self.differentiability)
 
 
 def mask2d(X: Tensor) -> Tensor:
