@@ -14,12 +14,12 @@ class Module:
     def __call__(self, *args: Any, **kwds: Any) -> str:
         return self.f(*args, **kwds)
 
-    def f(self, G: graphviz.Graph, *X: str) -> str:
+    def f(self, B: graphviz.Graph, *X: str) -> str:
 
-        G.node(self.out_id, self.name, **self.node_format)
+        B.node(self.out_id, self.name, **self.node_format)
 
         for i in X:
-            G.edge(i, self.out_id)
+            B.edge(i, self.out_id)
         return self.out_id
 
 
