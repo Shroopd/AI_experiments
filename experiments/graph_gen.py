@@ -253,6 +253,6 @@ for meta_dims in range(2, 4 + 1):
             graph.edge(X, "END")
 
             graph.render(
-                str(meta_dims) + "D " + type(model).__name__ + ".gv", "fractal_graphviz"
+                str(meta_dims) + "D " + type(model).__name__ + ".gv", "experiments/fractal_graphviz"
             )
             graph.clear()
