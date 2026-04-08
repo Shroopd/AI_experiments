@@ -714,14 +714,14 @@ class ConvNDAttention(nn.Module):
         conv_dims: Iterable[int],
         radius: Iterable[int],
         step: Iterable[int],
-        attention: Callable[[Tensor, Tensor], Tensor],
+        attention: nn.Module,
     ) -> None:
         """`conv_dims` must be all negative"""
         super().__init__()
         self.conv_dims = tuple(conv_dims)
         assert all((i < 0) for i in self.conv_dims)
-        self.radius = radius
-        self.step = step
+        self.radius = tuple(radius)
+        self.step = tuple(step)
         # self.conv_dims = (self.conv_dims[i] - i for i in range(len(self.conv_dims)))
         self.attention = attention
 
@@ -743,7 +743,10 @@ class ConvNDAttention(nn.Module):
 class Conv2DAttention(nn.Module):
     # def __init__(self, *args, ) -> None:
     #     super().__init__(*args, )
-    def __init__(self, attention_block: Callable[[Tensor, Tensor], Tensor]) -> None:
+    def __init__(
+        self,
+        attention_block: nn.Module,
+    ) -> None:
         super().__init__()
         self.attention = attention_block
         self.pad = nn.CircularPad2d(3 // 2)
