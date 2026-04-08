@@ -737,11 +737,11 @@ class ConvNDAttention(nn.Module):
         self.attention = attention
 
     def forward(self, X: Tensor):
-        original_shape = X.size()
+        original_shape = list(X.size())
         for i, r, s in self.conv_dims, self.radius, self.step:
             X = X.unfold(i, 1 + 2 * r, s)
             X = X.movedim(-1, 0)
-        X = X.reshape([-1] + list(X.shape[: -len(original_shape)]))
+        X = X.reshape(list(original_shape[:-1] + [-1] + original_shape[-1:]))
         cell_count = X.shape[-1]
         center = cell_count // 2
 
