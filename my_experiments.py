@@ -706,6 +706,17 @@ class SineEncoding(torch.nn.Module):
         return out
 
 
+class ConvOrthDiagAttention(nn.Module):
+    def __init__(
+        self,
+        conv_space_dims: int,
+        attention: nn.Module,
+    ) -> None:
+        super().__init__()
+
+    def forward(self, X): ...
+
+
 class ConvNDAttention(nn.Module):
     """Channel last convention"""
 
