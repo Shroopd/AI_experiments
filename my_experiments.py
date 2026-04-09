@@ -97,28 +97,6 @@ def subset_loss(input: Tensor, target: Tensor):
     raise NotImplementedError
 
 
-# def orthogonality_loss(X: Tensor) -> Tensor:
-#     raise NotImplementedError
-
-
-# def permutation_loss(X: Tensor) -> Tensor:
-#     XP = X.pow(2)
-#     a = (XP.sum(-1) - 1).pow(2)
-#     b = (XP.sum(-2) - 1).pow(2)
-#     # c = ((X - 0.5).abs() - 0.5).abs()
-#     c = (XP - X).pow(2)
-#     # return c.mean()
-#     return (a.sum() + b.sum() + c.sum()) / (a.numel() + b.numel() + c.numel())
-
-
-# def permutation_loss(X: Tensor) -> Tensor:
-#     XP = X.abs()
-#     # a = (X.abs().sum(-1) - 1).abs()
-#     # b = (X.abs().sum(-2) - 1).abs()
-#     c = (XP @ XP.mT).fill_diagonal_(0)
-#     return (c + (XP - X)).mean()
-
-
 def generalized_permutation_matrix_loss(val: Tensor) -> Tensor:
     val = val.abs()
     a, b = (
