@@ -515,7 +515,7 @@ class AttentionZP(nn.Module):
         return self.dropout(value_shift)
 
 
-class LinearActivateZP(nn.Module):
+class LinearBiasActivateZP(nn.Module):
     """
     Linear with bias but it's a zero preserving unary function
     """
@@ -528,14 +528,16 @@ class LinearActivateZP(nn.Module):
     ) -> None:
         super().__init__()
 
+        # self.linear = nn.Linear(in_features, out_features, False)
+
         self.bias = nn.Parameter(torch.randn(out_features))
-        self.linear = nn.Linear(in_features, out_features, False)
+        self.weight = nn.Parameter(torch.randn(out_features))
         self.activation = activation
 
     def forward(self, input: Tensor) -> Tensor:
 
-        return self.activation(self.linear(input) + self.bias) - self.activation(
-            self.bias
+        return self.activation(
+            ff.linear(input, self.weight, self.bias) - self.activation(self.bias)
         )
 
 
