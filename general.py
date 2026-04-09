@@ -54,7 +54,7 @@ def silulog(X: Tensor, max_derivative: int = 2) -> Tensor:
 
 
 def recursive_meta_loss(
-    X: Tensor,
+    predicted_scores: Tensor,
     target_score: Tensor,
     error_normalizer: Callable[[Tensor], Tensor],
     prepend_original_score=False,
@@ -66,13 +66,13 @@ def recursive_meta_loss(
     while the action model should try to increase all output values from the prediction model.
     """
 
-    errors = torch.zeros_like(X)
-    errors[..., 0] = X[..., 0] - target_score
+    errors = torch.zeros_like(predicted_scores)
+    errors[..., 0] = predicted_scores[..., 0] - target_score
 
     with torch.no_grad():
-        for i in range(1, X.shape[-1]):
-            errors[..., i] = X[..., i] - error_normalizer(errors[..., i - 1])
-    out = error_normalizer(X - error_normalizer(errors))
+        for i in range(1, predicted_scores.shape[-1]):
+            errors[..., i] = predicted_scores[..., i] - error_normalizer(errors[..., i - 1])
+    out = error_normalizer(predicted_scores - error_normalizer(errors))
     if prepend_original_score:
         out = torch.cat((target_score, out), dim=-1)
     return out
