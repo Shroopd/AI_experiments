@@ -539,18 +539,16 @@ class LinearActivateZP(nn.Module):
         )
 
 
-class MultiplyPair(nn.Module):
+class Product(nn.Module):
     def __init__(
         self,
-        A: Callable[[Tensor], Tensor],
-        B: Callable[[Tensor], Tensor],
+        *M: nn.Module,
     ) -> None:
         super().__init__()
-        self.a = A
-        self.b = B
+        self.m = nn.ModuleList(M)
 
     def forward(self, X):
-        return self.a(X) * self.b(X)
+        return torch.stack(tuple(M(X) for M in self.m)).log().sum(-1).exp()
 
 
 class Swishmoid(nn.Module):
