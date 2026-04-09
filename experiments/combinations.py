@@ -12,7 +12,7 @@ buckets = [[] for _ in range(dims + 1)]
 
 
 def dirs(X):
-    return sum(abs(i) for i in X)
+    return dims-sum(i == 0 for i in X)
 
 
 for v in foo:
