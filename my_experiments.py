@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Iterable
+from typing import Callable, Iterable
 
 import torch
 from torch import nn
@@ -108,10 +108,6 @@ def generalized_permutation_matrix_loss(val: Tensor) -> Tensor:
 class GeneralizedPermutationMatrixLoss(nn.Module):
     def forward(self, X):
         return generalized_permutation_matrix_loss(X)
-
-
-# def make_weight(*dims: int):
-#     return Parameter(torch.randn(dims))
 
 
 class FractalTransformer(nn.Module):
@@ -411,108 +407,112 @@ class HeadlessAttention(nn.Module):
         return value_out
 
 
-# class AttentionZP(nn.Module):
-#     # """One query vector per operation"""
+def make_weight(*dims: int):
+    return Parameter(torch.randn(dims))
 
-#     def __init__(
-#         self,
-#         key_size: int,
-#         query_size: int,
-#         heads: int,
-#         attention_size: int,
-#         compress_size: int,
-#         bias_query: bool,
-#         return_attention: bool = False,
-#         mask: Callable[[Tensor], Tensor] | None = None,
-#         dropout=0.0,
-#     ) -> None:
-#         super().__init__()
 
-#         # should preserve 0s
-#         self.key_down = make_weight(heads, key_size, attention_size)
+class AttentionZP(nn.Module):
+    # """One query vector per operation"""
 
-#         # should preserve 0s
-#         self.query_down = make_weight(heads, query_size, attention_size)
-#         # should NOT preserve 0s
-#         self.bias_query = bias_query
-#         if bias_query:
-#             self.query_down_bias = make_weight(heads, 1, attention_size)
+    def __init__(
+        self,
+        key_size: int,
+        query_size: int,
+        heads: int,
+        attention_size: int,
+        compress_size: int,
+        bias_query: bool,
+        return_attention: bool = False,
+        mask: Callable[[Tensor], Tensor] | None = None,
+        dropout=0.0,
+    ) -> None:
+        super().__init__()
 
-#         # should preserve 0s
-#         self.compress = query_size > compress_size * 2
-#         if self.compress:
-#             self.value_down = make_weight(heads, query_size, compress_size)
-#             self.value_up = make_weight(heads, compress_size, query_size)
-#         else:
-#             self.value_over = make_weight(heads, query_size, query_size)
+        # should preserve 0s
+        self.key_down = make_weight(heads, key_size, attention_size)
 
-#         self.return_attention = return_attention
-#         self.mask = mask
-#         self.dropout = nn.Dropout(dropout)
+        # should preserve 0s
+        self.query_down = make_weight(heads, query_size, attention_size)
+        # should NOT preserve 0s
+        self.bias_query = bias_query
+        if bias_query:
+            self.query_down_bias = make_weight(heads, 1, attention_size)
 
-#     def forward(
-#         self,
-#         query_tokens: Tensor,
-#         key_tokens: Tensor | None = None,
-#     ):
-#         """
-#         number of queries:  Q
-#         length of queries:  QT
-#         number of keys:     K
-#         length of keys:     KT
-#         number of heads:    H
+        # should preserve 0s
+        self.compress = query_size > compress_size * 2
+        if self.compress:
+            self.value_down = make_weight(heads, query_size, compress_size)
+            self.value_up = make_weight(heads, compress_size, query_size)
+        else:
+            self.value_over = make_weight(heads, query_size, query_size)
 
-#         query_tokens.shape  [..., Q, T]
-#         key_tokens.shape    [..., K, T]
+        self.return_attention = return_attention
+        self.mask = mask
+        self.dropout = nn.Dropout(dropout)
 
-#         batching and broadcasting for dimensions prior to last two
-#         """
+    def forward(
+        self,
+        query_tokens: Tensor,
+        key_tokens: Tensor | None = None,
+    ):
+        """
+        number of queries:  Q
+        length of queries:  QT
+        number of keys:     K
+        length of keys:     KT
+        number of heads:    H
 
-#         if key_tokens is None:
-#             key_tokens = query_tokens
+        query_tokens.shape  [..., Q, T]
+        key_tokens.shape    [..., K, T]
 
-#         key_tokens = key_tokens.unsqueeze(-3)
-#         # [..., 1, K, KT]
+        batching and broadcasting for dimensions prior to last two
+        """
 
-#         query_tokens = query_tokens.unsqueeze(-3)
-#         # [..., 1, Q, QT]
+        if key_tokens is None:
+            key_tokens = query_tokens
 
-#         key = key_tokens @ self.key_down
-#         # [..., H, K, A]
+        key_tokens = key_tokens.unsqueeze(-3)
+        # [..., 1, K, KT]
 
-#         query = query_tokens @ self.query_down
-#         if self.bias_query:
-#             query = query + self.query_down_bias
-#         # [..., H, Q, A]
+        query_tokens = query_tokens.unsqueeze(-3)
+        # [..., 1, Q, QT]
 
-#         attention_logits = key @ query.transpose(-2, -1)
-#         # [..., H, K, Q]
+        key = key_tokens @ self.key_down
+        # [..., H, K, A]
 
-#         attention_dist_keys = swishmax(attention_logits, dim=-2)
-#         # [..., H, K, Q]
+        query = query_tokens @ self.query_down
+        if self.bias_query:
+            query = query + self.query_down_bias
+        # [..., H, Q, A]
 
-#         values_scaled = key_tokens.unsqueeze(-2) * attention_dist_keys.unsqueeze(-1)
-#         # [..., H, K, Q, T] = [..., 1, K, 1, KT] * [..., H, K, Q, 1]
+        attention_logits = key @ query.transpose(-2, -1)
+        # [..., H, K, Q]
 
-#         value_shift = values_scaled.sum(-3)
-#         # [..., H, Q, T]
+        attention_dist_keys = swishmax(attention_logits, dim=-2)
+        # [..., H, K, Q]
 
-#         if self.compress:
-#             value_shift @= self.value_down
-#             # [..., H, Q, A]
-#             value_shift @= self.value_up
-#             # [..., H, Q, T]
-#         else:
-#             value_shift @= self.value_over
-#             # [..., H, Q, T]
+        values_scaled = key_tokens.unsqueeze(-2) * attention_dist_keys.unsqueeze(-1)
+        # [..., H, K, Q, T] = [..., 1, K, 1, KT] * [..., H, K, Q, 1]
 
-#         value_shift = value_shift.sum(-3)
-#         #  [..., Q, T]
+        value_shift = values_scaled.sum(-3)
+        # [..., H, Q, T]
 
-#         # if self.return_attention:
-#         #     return value_shift, attention_logits
-#         # else:
-#         return self.dropout(value_shift)
+        if self.compress:
+            value_shift @= self.value_down
+            # [..., H, Q, A]
+            value_shift @= self.value_up
+            # [..., H, Q, T]
+        else:
+            value_shift @= self.value_over
+            # [..., H, Q, T]
+
+        value_shift = value_shift.sum(-3)
+        #  [..., Q, T]
+
+        # if self.return_attention:
+        #     return value_shift, attention_logits
+        # else:
+        return self.dropout(value_shift)
 
 
 class LinearActivateZP(nn.Module):
