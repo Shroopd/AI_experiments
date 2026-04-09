@@ -4,7 +4,7 @@ from itertools import product
 
 import numpy
 
-dims = 5
+dims = 3
 
 foo = product((-1, 0, 1), repeat=dims)
 
@@ -23,7 +23,7 @@ for bi in range(len(buckets)):
     b = list(1 + numpy.array(b).T)
     for i in range(len(b)):
         b[i] = tuple(b[i])
-    buckets[bi] = tuple(b) # type: ignore
+    buckets[bi] = tuple(b)  # type: ignore
 
 
 bar = numpy.zeros((3,) * dims, dtype=int)
