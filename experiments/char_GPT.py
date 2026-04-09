@@ -4,12 +4,12 @@ import pickle
 import uuid
 import random
 
-import my_experiments as mxp
+import ai_experiments.general as mxp
 import torch.nn as nn
 import torch.nn.functional as ff
 
 from torch import Tensor
-from my_experiments import mask2d
+from ai_experiments.general import mask2d
 
 
 class MLP(nn.Module):
