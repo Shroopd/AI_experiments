@@ -102,7 +102,7 @@ def generalized_permutation_matrix_loss(val: Tensor) -> Tensor:
     a, b = (
         torch.cosine_similarity(X.unsqueeze(-2), X.unsqueeze(-3)) for X in (val, val.mT)
     )
-    return ((a + b) / 2).mean()
+    return (a.sum() + b.sum()) / (a.numel() + b.numel())
 
 
 class GeneralizedPermutationMatrixLoss(nn.Module):
