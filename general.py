@@ -163,7 +163,7 @@ class FractalAttention(nn.Module):
     def __init__(
         self,
         dims: int,
-        depth: int,
+        meta_dims: int = 2,
         *,
         mask: Callable[[Tensor], Tensor] = nn.Identity(),
         attention_1d: Callable[[int], nn.Module] = lambda dims: nn.Linear(
@@ -172,8 +172,8 @@ class FractalAttention(nn.Module):
     ) -> None:
         super().__init__()
         self.dims = dims
-        self.depth = depth
-        assert depth >= 2, (
+        self.depth = meta_dims
+        assert meta_dims >= 2, (
             "Go use a proper 1d module instead of trying FractalAttention 1D, I haven't set up a factory yet"
         )
         (
@@ -184,9 +184,9 @@ class FractalAttention(nn.Module):
             self.to_value_out,
         ) = (
             (attention_1d(dims))
-            if depth == 2
+            if meta_dims == 2
             else (
-                FractalAttention(dims, depth - 1, mask=mask, attention_1d=attention_1d)
+                FractalAttention(dims, meta_dims - 1, mask=mask, attention_1d=attention_1d)
             )
             for _ in range(5)
         )
