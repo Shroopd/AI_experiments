@@ -71,7 +71,9 @@ def recursive_meta_loss(
 
     with torch.no_grad():
         for i in range(1, predicted_scores.shape[-1]):
-            errors[..., i] = predicted_scores[..., i] - error_normalizer(errors[..., i - 1])
+            errors[..., i] = predicted_scores[..., i] - error_normalizer(
+                errors[..., i - 1]
+            )
     out = error_normalizer(predicted_scores - error_normalizer(errors))
     if prepend_original_score:
         out = torch.cat((target_score, out), dim=-1)
