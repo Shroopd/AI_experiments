@@ -684,7 +684,7 @@ class SineEncoding(torch.nn.Module):
         return out
 
 
-class ConvAttentionByDiagonal(nn.Module):
+class ConvAttentionByDiagonals(nn.Module):
     def __init__(
         self,
         conv_space_dims: int,
