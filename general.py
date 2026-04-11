@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import math
+import itertools
 from typing import Callable, Iterable
 
 import torch
+import numpy
 from torch import nn
 from torch.nn import functional as ff
 from torch.nn.parameter import Parameter
@@ -686,15 +688,46 @@ class SineEncoding(torch.nn.Module):
         return out
 
 
+def generate_diagonal_indices(dims, radius):
+    def dirs(X):
+        return dims - sum(1 if (i == 0) else 0 for i in X)
+
+    positions = (
+        list(p) for p in itertools.product(range(-radius, radius + 1), repeat=dims)
+    )
+
+    pos_buckets = [[] for _ in range(dims + 1)]
+
+    for v in positions:
+        pos_buckets[dirs(v)].append(v)
+
+    indice_buckets = tuple(
+        tuple(tuple(b[r][c] + radius for r in range(len(b))) for c in range(len(b[0])))
+        for b in pos_buckets
+    )
+    return indice_buckets
+
+
 class ConvAttentionByDiagonals(nn.Module):
     def __init__(
         self,
+        dims: int,
         conv_space_dims: int,
-        attention: nn.Module,
+        attention_factory: Callable[[int], nn.Module] = lambda dims : FractalAttention(dims=dims),
+        *,
+        radius: int = 1,
     ) -> None:
         super().__init__()
+        self.conv_space_dims = conv_space_dims
+        self.radius = radius
+        self.target_indices = generate_diagonal_indices(conv_space_dims, radius)
 
-    def forward(self, X): ...
+        self.first_attentions = nn.ModuleList( attention_factory(dims) for  )
+
+
+    def forward(self, X: Tensor) -> Tensor:
+        for i in range(self.conv_space_dims):
+            ...
 
 
 class ConvNDAttention(nn.Module):
