@@ -32,7 +32,7 @@ bar = numpy.zeros((radius * 2 + 1,) * dims, dtype=int)
 for d in range(dims):
     numpy.swapaxes(bar, d, -1)[:] += numpy.arange(radius * 2 + 1) * 10 ** (dims - d - 1)
 
-bar = bar
+bar = bar[None, ...]
 
 
 buckets = generate_diagonal_indices(dims, radius)
@@ -43,5 +43,5 @@ for i in range(len(buckets)):
     b = buckets[i]
     # print(bar[tuple(1 + numpy.array(b).T)])
     # print(i, "B\n", bar[b])
-    bar[b] = i
+    bar[(...,) + b] = i
 print("C\n", bar)
