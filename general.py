@@ -54,7 +54,7 @@ def silulog(X: Tensor, max_derivative: int = 2) -> Tensor:
 
 
 def recursive_meta_loss(
-    X: Tensor,
+    predicted_scores: Tensor,
     target_score: Tensor,
     error_normalizer: Callable[[Tensor], Tensor],
     prepend_original_score=False,
@@ -66,13 +66,13 @@ def recursive_meta_loss(
     while the action model should try to increase all output values from the prediction model.
     """
 
-    errors = torch.zeros_like(X)
-    errors[..., 0] = X[..., 0] - target_score
+    errors = torch.zeros_like(predicted_scores)
+    errors[..., 0] = predicted_scores[..., 0] - target_score
 
     with torch.no_grad():
-        for i in range(1, X.shape[-1]):
-            errors[..., i] = X[..., i] - error_normalizer(errors[..., i - 1])
-    out = error_normalizer(X - error_normalizer(errors))
+        for i in range(1, predicted_scores.shape[-1]):
+            errors[..., i] = predicted_scores[..., i] - error_normalizer(errors[..., i - 1])
+    out = error_normalizer(predicted_scores - error_normalizer(errors))
     if prepend_original_score:
         out = torch.cat((target_score, out), dim=-1)
     return out
@@ -102,7 +102,7 @@ def generalized_permutation_matrix_loss(val: Tensor) -> Tensor:
     a, b = (
         torch.cosine_similarity(X.unsqueeze(-2), X.unsqueeze(-3)) for X in (val, val.mT)
     )
-    return ((a + b) / 2).mean()
+    return (a.sum() + b.sum()) / (a.numel() + b.numel())
 
 
 class GeneralizedPermutationMatrixLoss(nn.Module):
@@ -515,7 +515,7 @@ class AttentionZP(nn.Module):
         return self.dropout(value_shift)
 
 
-class LinearActivateZP(nn.Module):
+class LinearBiasActivateZP(nn.Module):
     """
     Linear with bias but it's a zero preserving unary function
     """
@@ -528,29 +528,29 @@ class LinearActivateZP(nn.Module):
     ) -> None:
         super().__init__()
 
+        # self.linear = nn.Linear(in_features, out_features, False)
+
         self.bias = nn.Parameter(torch.randn(out_features))
-        self.linear = nn.Linear(in_features, out_features, False)
+        self.weight = nn.Parameter(torch.randn(out_features))
         self.activation = activation
 
     def forward(self, input: Tensor) -> Tensor:
 
-        return self.activation(self.linear(input) + self.bias) - self.activation(
-            self.bias
+        return self.activation(
+            ff.linear(input, self.weight, self.bias) - self.activation(self.bias)
         )
 
 
-class MultiplyPair(nn.Module):
+class Product(nn.Module):
     def __init__(
         self,
-        A: Callable[[Tensor], Tensor],
-        B: Callable[[Tensor], Tensor],
+        *M: nn.Module,
     ) -> None:
         super().__init__()
-        self.a = A
-        self.b = B
+        self.m = nn.ModuleList(M)
 
     def forward(self, X):
-        return self.a(X) * self.b(X)
+        return torch.stack(tuple(M(X) for M in self.m)).log().sum(-1).exp()
 
 
 class Swishmoid(nn.Module):

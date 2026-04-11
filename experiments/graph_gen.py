@@ -227,11 +227,21 @@ class FractalAttentionGraph(Module):
 
 # meta_dims = 3
 
+start = 2
+end = 4
 
-for meta_dims in range(2, 4 + 1):
-    for graph in (graphviz.Digraph(format="png"), graphviz.Digraph(format="svg")):
+for meta_dims in range(
+    start,
+    # start + 1,
+    # end,
+    end + 1,
+):
+    for graph in (
+        graphviz.Digraph(format="png"),
+        # graphviz.Digraph(format="svg"),
+    ):
         for model in (
-            FractalTransformerGraph(meta_dims),
+            # FractalTransformerGraph(meta_dims),
             FractalAttentionGraph(meta_dims),
         ):
             graph.node(
@@ -253,6 +263,7 @@ for meta_dims in range(2, 4 + 1):
             graph.edge(X, "END")
 
             graph.render(
-                str(meta_dims) + "D " + type(model).__name__ + ".gv", "experiments/fractal_graphviz"
+                str(meta_dims) + "D " + type(model).__name__ + ".gv",
+                "experiments/fractal_graphviz",
             )
             graph.clear()
