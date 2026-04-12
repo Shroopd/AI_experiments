@@ -710,7 +710,8 @@ def generate_diagonal_indices(dims, radius):
     return indice_buckets
 
 
-class ConvNDAttention(nn.Module):
+class ConvCubeAttention(nn.Module):
+    "Because it operates on the structural components of a (hyper)cube"
     def __init__(
         self,
         dims: int,
@@ -753,7 +754,7 @@ class ConvNDAttention(nn.Module):
         )
 
 
-class ConvNDAttentionNaive(nn.Module):
+class ConvNDAttention(nn.Module):
     """Channel last convention"""
 
     def __init__(
