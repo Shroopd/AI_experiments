@@ -178,7 +178,7 @@ class FractalAttention(nn.Module):
         self.dims = dims
         self.depth = meta_dims
         assert meta_dims >= 2, (
-            "Go use a proper 1d module instead of trying FractalAttention 1D, I haven't set up a factory yet"
+            "Go use a proper 1d module instead of trying a FractalAttention 1D, I haven't set up proper behavior for that yet"
         )
         (
             self.to_query,
@@ -190,7 +190,9 @@ class FractalAttention(nn.Module):
             (attention_1d(dims))
             if meta_dims == 2
             else (
-                FractalAttention(dims, meta_dims - 1, mask=mask, attention_1d=attention_1d)
+                FractalAttention(
+                    dims, meta_dims - 1, mask=mask, attention_1d=attention_1d
+                )
             )
             for _ in range(5)
         )
@@ -708,29 +710,50 @@ def generate_diagonal_indices(dims, radius):
     return indice_buckets
 
 
-class ConvAttentionByDiagonals(nn.Module):
+class ConvNDAttention(nn.Module):
     def __init__(
         self,
         dims: int,
-        conv_space_dims: int,
-        attention_factory: Callable[[int], nn.Module] = lambda dims : FractalAttention(dims=dims),
+        conv_dims: int,
+        attention_factory: Callable[[int], nn.Module] = lambda dims: FractalAttention(
+            dims=dims
+        ),
         *,
         radius: int = 1,
     ) -> None:
         super().__init__()
-        self.conv_space_dims = conv_space_dims
+        self.dims = dims
+        self.conv_dims = conv_dims
         self.radius = radius
-        self.target_indices = generate_diagonal_indices(conv_space_dims, radius)
+        self.conv_indices = generate_diagonal_indices(conv_dims, radius)
 
-        self.first_attentions = nn.ModuleList( attention_factory(dims) for  )
+        self.first_layer = nn.ModuleList(
+            attention_factory(dims) for _ in range(conv_dims)
+        )
 
+        self.second_layer = attention_factory(dims)
 
     def forward(self, X: Tensor) -> Tensor:
-        for i in range(self.conv_space_dims):
-            ...
+        for i in range(self.conv_dims):
+            X = X.unfold(-1 - self.conv_dims, 2 * self.radius + 1, 1)
+        # X = X.movedim(-1 - self.conv_dims, -1)
+
+        intermediate_result = []
+        for i in range(self.conv_dims):
+            intermediate_result.append(
+                self.first_layer[i](
+                    X[(...,) + self.conv_indices[0]].mT,
+                    X[(...,) + self.conv_indices[i]].mT,
+                )
+            )
+
+        return self.second_layer(
+            X[(...,) + self.conv_indices[0]].mT,
+            torch.cat(intermediate_result, -2),
+        )
 
 
-class ConvNDAttention(nn.Module):
+class ConvNDAttentionNaive(nn.Module):
     """Channel last convention"""
 
     def __init__(
