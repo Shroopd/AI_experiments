@@ -118,8 +118,8 @@ class FractalTransformer(nn.Module):
     def __init__(
         self,
         dims: int,
-        depth: int,
         module_1d: Callable[[int], nn.Module],
+        depth: int = 2,
         *,
         mask: Callable[[Tensor], Tensor] = nn.Identity(),
         pos_encoder: Callable[[Tensor, Tensor], Tensor] = nn.Identity(),
@@ -147,7 +147,7 @@ class FractalTransformer(nn.Module):
         if depth == 1:
             return self.module_1d(dims)
         else:
-            return FractalTransformer(dims, depth, self.module_1d, mask=self.mask)
+            return FractalTransformer(dims, self.module_1d, depth, mask=self.mask)
 
     def forward(self, X: Tensor):
         X = self.pre(X)
@@ -712,6 +712,7 @@ def generate_diagonal_indices(dims, radius):
 
 class ConvCubeAttention(nn.Module):
     "Because it operates on the structural components of a (hyper)cube"
+
     def __init__(
         self,
         dims: int,
