@@ -2,7 +2,8 @@ import math
 import itertools
 from itertools import product
 
-import numpy
+# import numpy
+import torch
 
 
 def generate_diagonal_indices(dims, radius):
@@ -25,12 +26,17 @@ def generate_diagonal_indices(dims, radius):
     return indice_buckets
 
 
-dims = 3
+dims = 2
 radius = 1
 
-bar = numpy.zeros((radius * 2 + 1,) * dims, dtype=int)
-for d in range(dims):
-    numpy.swapaxes(bar, d, -1)[:] += numpy.arange(radius * 2 + 1) * 10 ** (dims - d - 1)
+# bar = torch.zeros((radius * 2 + 1,) * dims)
+# for d in range(dims):
+#     torch.swapaxes(bar, d, -1)[:] += torch.arange(radius * 2 + 1) * 10 ** (dims - d - 1)
+
+bar = torch.arange((radius * 2 + 1) ** dims * 5).reshape(
+    (1, 5) + tuple(radius * 2 + 1 for _ in range(dims))
+)
+
 
 bar = bar[None, ...]
 
@@ -39,9 +45,11 @@ buckets = generate_diagonal_indices(dims, radius)
 
 print("A\n", bar)
 print("A\n", buckets)
+print("A\n", bar.shape)
 for i in range(len(buckets)):
     b = buckets[i]
     # print(bar[tuple(1 + numpy.array(b).T)])
-    # print(i, "B\n", bar[b])
+    print(i, "B\n", bar[(...,) + b].mT)
+    print(i, "B\n", bar[(...,) + b].mT.shape)
     bar[(...,) + b] = i
 print("C\n", bar)
