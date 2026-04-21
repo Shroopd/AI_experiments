@@ -5,14 +5,10 @@ import itertools
 from typing import Callable, Iterable
 
 import torch
-import numpy
 from torch import nn
 from torch.nn import functional as ff
 from torch.nn.parameter import Parameter
 from torch import Tensor
-
-NOT_EPSILON = 1
-"""A number that isn't very small, and definitely not 0"""
 
 
 def swishmax(
@@ -22,10 +18,23 @@ def swishmax(
     xexp = input * torch.exp(input - torch.amax(input, dim=dim, keepdim=True))
     if shrink_factor is not None:
         xexp = xexp / shrink_factor
-    out = torch.div(
-        xexp, (torch.sum(torch.abs(xexp), dim=dim, keepdim=True) + NOT_EPSILON)
-    )
+    out = torch.div(xexp, (torch.sum(torch.abs(xexp), dim=dim, keepdim=True) + 1))
     return out
+
+
+def swishexp(X: Tensor):
+    xexp = X * X.exp()
+    return xexp / (xexp + 1)
+
+
+class Swishsig(nn.Module):
+    def __init__(
+        self,
+    ) -> None:
+        super().__init__()
+
+    def forward(self, X):
+        return swishexp(X)
 
 
 def silulog(X: Tensor, max_derivative: int = 2) -> Tensor:
@@ -49,38 +58,6 @@ def silulog(X: Tensor, max_derivative: int = 2) -> Tensor:
         .log1p(),
     )
 
-    # """Combination of SiLU with log1p, with continuous 1st, 2nd, 3rd derivatives: https://www.desmos.com/calculator/rat8ushmma"""
-    # return X.sigmoid() * X.where(
-    #     X <= 0, (X + X.pow(2).div(2) + X.pow(3).div(6)).log1p()
-    # )
-
-
-def recursive_meta_loss(
-    predicted_scores: Tensor,
-    target_score: Tensor,
-    error_normalizer: Callable[[Tensor], Tensor],
-    prepend_original_score=False,
-):
-    """
-    Input is a vector of recursive loss predictions., of shape [...,B,N] \n
-    Target is a [...,B] shape vector
-    When training, the prediction model should try to decrease all meta_loss values,\n
-    while the action model should try to increase all output values from the prediction model.
-    """
-
-    errors = torch.zeros_like(predicted_scores)
-    errors[..., 0] = predicted_scores[..., 0] - target_score
-
-    with torch.no_grad():
-        for i in range(1, predicted_scores.shape[-1]):
-            errors[..., i] = predicted_scores[..., i] - error_normalizer(
-                errors[..., i - 1]
-            )
-    out = error_normalizer(predicted_scores - error_normalizer(errors))
-    if prepend_original_score:
-        out = torch.cat((target_score, out), dim=-1)
-    return out
-
 
 class Silulog(nn.Module):
     def __init__(self, differentiability: int = 2) -> None:
@@ -90,6 +67,36 @@ class Silulog(nn.Module):
 
     def forward(self, X):
         return silulog(X, self.differentiability)
+
+
+def recursive_meta_loss(
+    predicted_score_and_losses: Tensor,
+    target_score_or_loss: Tensor,
+    error_normalizer: Callable[[Tensor], Tensor] = torch.abs,
+    score_is_also_loss=False,
+):
+    """
+    Input is a vector of recursive loss predictions., of shape [...,B,N] \n
+    Target is a [...,B] shape vector
+    When training, the prediction model should try to decrease all meta_loss values,\n
+    while the action model should try to increase all output values from the prediction model.\n
+    Prepend the original score if it is also a loss term that must be decreased.
+    """
+
+    errors = torch.zeros_like(predicted_score_and_losses)
+    errors[..., 0] = predicted_score_and_losses[..., 0] - target_score_or_loss
+
+    with torch.no_grad():
+        for i in range(1, predicted_score_and_losses.shape[-1]):
+            errors[..., i] = predicted_score_and_losses[..., i] - error_normalizer(
+                errors[..., i - 1]
+            )
+    out = error_normalizer(predicted_score_and_losses - error_normalizer(errors))
+
+    if score_is_also_loss:
+        out = torch.cat((target_score_or_loss, out), dim=-1)
+    else:
+        return out
 
 
 def mask2d(X: Tensor) -> Tensor:
@@ -122,7 +129,7 @@ class FractalTransformer(nn.Module):
         depth: int = 2,
         *,
         mask: Callable[[Tensor], Tensor] = nn.Identity(),
-        pos_encoder: Callable[[Tensor, Tensor], Tensor] = nn.Identity(),
+        pos_encoder: nn.Module = nn.Identity(),
         attention_1d: Callable[[int], nn.Module] | None = None,
     ) -> None:
         super().__init__()
@@ -149,17 +156,13 @@ class FractalTransformer(nn.Module):
         else:
             return FractalTransformer(dims, self.module_1d, depth, mask=self.mask)
 
-    def forward(self, X: Tensor):
-        X = self.pre(X)
-        X = X + self.mid(
-            self.pos_encoder(
-                X,
-                torch.arange(X.shape[-2], device=X.device)
-                .broadcast_to(X.shape[:-1])
-                .unsqueeze(-1),
-            )
-        )
-        X = self.end(X)
+    def forward(self, X: Tensor, key: Tensor | None = None):
+        X = X + self.pre(X)
+        if key is None:
+            X = X + self.mid(self.pos_encoder(X))
+        else:
+            X = X + self.mid(self.pos_encoder(X), self.pos_encoder(key))
+        X = X + self.end(X)
         return X
 
 
@@ -220,7 +223,7 @@ class FractalAttention(nn.Module):
         value_tokens: Tensor | None = None,
         *,
         return_attention=False,
-    ):
+    ) -> Tensor | tuple[Tensor, ...]:
         if key_tokens is None:
             key_tokens = query_tokens
 
