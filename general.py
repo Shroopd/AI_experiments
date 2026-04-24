@@ -22,6 +22,10 @@ def swishmax(
     return out
 
 
+def overlap(*T: Tensor):
+    return tuple(slice(None, min(*X)) for X in zip(*(A.shape for A in (T))))
+
+
 def swishexp(X: Tensor):
     xexp = X * X.exp()
     return xexp / (xexp + 1)
