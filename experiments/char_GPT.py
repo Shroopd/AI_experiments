@@ -17,7 +17,7 @@ class MLP(nn.Module):
         super().__init__()
         self.all = nn.Sequential(
             nn.Linear(dims, dims * 2, False),
-            mxp.Silulog(),
+            mxp.Silulog1p(),
             nn.Linear(2 * dims, dims, False),
         )
 
