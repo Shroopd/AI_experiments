@@ -26,22 +26,22 @@ def overlap(*T: Tensor):
     return tuple(slice(None, min(*X)) for X in zip(*(A.shape for A in (T))))
 
 
-def swishexp(X: Tensor):
+def swish_sigmoid(X: Tensor):
     xexp = X * X.exp()
     return xexp / (xexp + 1)
 
 
-class Swishsig(nn.Module):
+class SwishSigmoid(nn.Module):
     def __init__(
         self,
     ) -> None:
         super().__init__()
 
     def forward(self, X):
-        return swishexp(X)
+        return swish_sigmoid(X)
 
 
-def silulog(X: Tensor, max_derivative: int = 2) -> Tensor:
+def silulog1p(X: Tensor, max_derivative: int = 2) -> Tensor:
     """
     Combination of SiLU with log1p, with selectable differentiability.\n
     Done by substituting the x in x * sigmoid with ln(~e^x),
@@ -63,14 +63,14 @@ def silulog(X: Tensor, max_derivative: int = 2) -> Tensor:
     )
 
 
-class Silulog(nn.Module):
+class Silulog1p(nn.Module):
     def __init__(self, differentiability: int = 2) -> None:
         super().__init__()
         assert differentiability >= 1
         self.differentiability = differentiability
 
     def forward(self, X):
-        return silulog(X, self.differentiability)
+        return silulog1p(X, self.differentiability)
 
 
 def recursive_meta_loss(
@@ -566,7 +566,7 @@ class Product(nn.Module):
         return torch.stack(tuple(M(X) for M in self.m)).log().sum(-1).exp()
 
 
-class Swishmoid(nn.Module):
+class PolynomialishSigmoid(nn.Module):
     def __init__(
         self,
         dims: int,
