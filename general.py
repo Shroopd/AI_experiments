@@ -32,6 +32,8 @@ def swish_sigmoid(X: Tensor):
 
 
 class SwishSigmoid(nn.Module):
+    "Swishmax with the multi-element guardrails removed for better single-element behavior"
+
     def __init__(
         self,
     ) -> None:
