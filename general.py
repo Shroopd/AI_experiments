@@ -182,6 +182,7 @@ class FractalAttention(nn.Module):
         attention_1d: Callable[[int], nn.Module] = lambda dims: nn.Linear(
             dims, dims, False
         ),
+        single_recipient_softmax=False,
     ) -> None:
         super().__init__()
         self.dims = dims
@@ -205,8 +206,14 @@ class FractalAttention(nn.Module):
             )
             for _ in range(5)
         )
-        self.row_dims = tuple(-3 - i for i in range(0, self.depth - 1))
-        self.col_dims = tuple(-2 - i for i in range(0, self.depth - 1))
+        self.key_dims = tuple(-3 - i for i in range(0, self.depth - 1))
+        self.query_dims = tuple(-2 - i for i in range(0, self.depth - 1))
+
+        self.softmax_dims = (
+            self.key_dims
+            if not single_recipient_softmax
+            else (self.key_dims + self.query_dims)
+        )
 
         self.mask = mask
 
@@ -250,7 +257,7 @@ class FractalAttention(nn.Module):
         attention_logits = attention_raw + self.to_attention_logits(attention_raw)
         # [..., K, Q, ..., T]
 
-        attention_selection = swishmax(attention_logits, dim=self.row_dims)
+        attention_selection = swishmax(attention_logits, dim=self.key_dims)
         # [...,^K, Q, ..., T]
 
         value = value_tokens + self.to_value(value_tokens)
@@ -258,7 +265,7 @@ class FractalAttention(nn.Module):
         value_selected = self.batchify(value, True) * attention_selection
         # [..., K, Q, ...] = [..., K, 1, ...] * [..., K, Q, ...]
 
-        value_sum = value_selected.sum(self.row_dims)
+        value_sum = value_selected.sum(self.key_dims)
         # [..., Q, T]
         value_out = value_sum + self.to_value_out(value_sum)
         # [..., Q, T]
