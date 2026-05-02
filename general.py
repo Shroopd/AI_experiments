@@ -182,7 +182,9 @@ class FractalAttention(nn.Module):
         attention_1d: Callable[[int], nn.Module] = lambda dims: nn.Linear(
             dims, dims, False
         ),
-        single_recipient_softmax=False,
+        # single_recipient_softmax=False,
+        softmax_along_keys: bool = True,
+        softmax_along_queries: bool = False,
     ) -> None:
         super().__init__()
         self.dims = dims
@@ -209,10 +211,8 @@ class FractalAttention(nn.Module):
         self.key_dims = tuple(-3 - i for i in range(0, self.depth - 1))
         self.query_dims = tuple(-2 - i for i in range(0, self.depth - 1))
 
-        self.softmax_dims = (
-            self.key_dims
-            if not single_recipient_softmax
-            else (self.key_dims + self.query_dims)
+        self.softmax_dims = (self.key_dims if softmax_along_keys else ()) + (
+            self.query_dims if softmax_along_queries else ()
         )
 
         self.mask = mask
