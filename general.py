@@ -559,8 +559,8 @@ class LinearBiasActivateZP(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
 
         return self.activation(
-            ff.linear(input, self.weight, self.bias) - self.activation(self.bias)
-        )
+            ff.linear(input, self.weight, self.bias)
+        ) - self.activation(self.bias)
 
 
 class Product(nn.Module):
@@ -572,7 +572,8 @@ class Product(nn.Module):
         self.m = nn.ModuleList(M)
 
     def forward(self, X):
-        return torch.stack(tuple(M(X) for M in self.m)).log().sum(-1).exp()
+        return torch.stack(tuple(M(X) for M in self.m)).prod(0)
+        # return torch.stack(tuple(M(X) for M in self.m)).log().sum(-1).exp()
 
 
 class PolynomialishSigmoid(nn.Module):
