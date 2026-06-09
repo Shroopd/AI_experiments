@@ -12,12 +12,14 @@ from torch import Tensor
 
 
 def swishmax(
-    input: Tensor, dim: torch.types._size | int = -1, *, shrink_factor=None
+    input: Tensor,
+    dim: torch.types._size | int = -1,
+    #   *, shrink_factor=None
 ) -> Tensor:
     "shrink_factor is used to divide the xe^x before normalizing"
     xexp = input * torch.exp(input - torch.amax(input, dim=dim, keepdim=True))
-    if shrink_factor is not None:
-        xexp = xexp / shrink_factor
+    # if shrink_factor is not None:
+    #     xexp = xexp / shrink_factor
     out = torch.div(xexp, (torch.sum(torch.abs(xexp), dim=dim, keepdim=True) + 1))
     return out
 
@@ -289,6 +291,8 @@ class AttentionDeduplicate(nn.Module):
         attention_logits_bias=False,
         value_out_bias=False,
     ) -> None:
+        raise NotImplementedError
+
         super().__init__()
 
         # fmt:off
@@ -306,6 +310,7 @@ class AttentionDeduplicate(nn.Module):
         query_tokens: Tensor,
         key_tokens: Tensor | None = None,
     ):
+        raise NotImplementedError
         """
         number of queries:  Q
         length of queries:  QT
