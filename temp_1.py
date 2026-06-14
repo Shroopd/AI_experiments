@@ -14,14 +14,18 @@ import general
 
 
 def insert_ones(shape: Iterable[int], *dims: int):
-    "Not in-place."
+    """
+    Makes a copy of the iterable with ones inserted at `dims`.
+
+    Not in-place.
+    """
     shape = list(shape)
     lenp1 = len(shape) + 1
     target_dims = sorted(d % lenp1 for d in dims)
     target_dims = list(target_dims[i] + i for i in range(len(target_dims)))
     for d in target_dims:
         shape.insert(d, 1)
-    return shape, tuple(target_dims)
+    return tuple(shape), tuple(target_dims)
 
 
 def unsqueeze_multi(
@@ -68,12 +72,12 @@ def compare(
     """
     compare(lhs,rhs) -> Tensor
 
-    
+
 
     Default of torch.mul is basically a matrix multiplication, but the vector dimension is not summed up.
     [a,v] @ [v,b] = [a,b]
     compare([a,v],[b,v]) = [a,b,v]
-    
+
     `A @ B == compare(A,B,-2).sum(-1)`
 
     Currently cannot compare dimension -1?
@@ -118,3 +122,12 @@ def softxor(A: Tensor, B: Tensor):
     C = (AB * ff.softmin(AB, 0)).sum(0)
     D = (AB * AB.softmax(0)).sum(0)
     return softand(C, D)
+
+
+def swishmax_v2(
+    X: Tensor,
+    *dim: int,
+) -> Tensor:
+    xmax = X * X.softmax(dim)
+    out = torch.div(xexp, (torch.sum(torch.abs(xexp), dim=dim, keepdim=True) + 1))
+    return out
