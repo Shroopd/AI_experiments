@@ -124,6 +124,14 @@ def generalized_permutation_matrix_loss(val: Tensor) -> Tensor:
     return (a.sum() + b.sum()) / (a.numel() + b.numel())
 
 
+def positive_generalized_permutation_matrix_loss(val: Tensor) -> Tensor:
+    val = val.abs()
+    a, b = (
+        torch.cosine_similarity(X.unsqueeze(-2), X.unsqueeze(-3)) for X in (val, val.mT)
+    )
+    return torch.cat((a.view(-1), b.view(-1))).mean()
+
+
 class GeneralizedPermutationMatrixLoss(nn.Module):
     def forward(self, X):
         return generalized_permutation_matrix_loss(X)
