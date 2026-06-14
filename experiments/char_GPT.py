@@ -4,25 +4,29 @@ import pickle
 import uuid
 import random
 
-import ai_experiments.general as mxp
+import general as xgen
+import functional as xff
 import torch.nn as nn
 import torch.nn.functional as ff
 
 from torch import Tensor
-from ai_experiments.general import mask2d
+from general import mask2d
 
 
 class MLP(nn.Module):
     def __init__(self, dims: int):
+
         super().__init__()
-        self.all = nn.Sequential(
-            nn.Linear(dims, dims * 2, False),
-            mxp.Silulog1p(),
-            nn.Linear(2 * dims, dims, False),
-        )
+
+        self.lhs, self.rhs, self.out = (nn.Linear(dims, dims) for _ in range(2))
+        # self.all = nn.Sequential(
+        #     nn.Linear(dims, dims * 2, False),
+        #     xgen.Silulog1p(),
+        #     nn.Linear(2 * dims, dims, False),
+        # )
 
     def forward(self, X):
-        return self.all(X)
+        return self.out(xff.softor(self.lhs(X), self.rhs(X)))
 
 
 class GPT(nn.Module):
@@ -30,21 +34,12 @@ class GPT(nn.Module):
         super().__init__()
         self.vocab_size = metadata["vocab_size"]
 
-        self.pos_encode = mxp.RotPosEncode(dims, 1, 2, 2048)
+        self.pos_encode = xgen.RotPosEncode(dims, 1, 2, 2048)
         self.encode = nn.Linear(vocab_size, dims)
 
         # with torch.no_grad():
         #     self.encode.weight *= 0.0001
         # self.encode = nn.Parameter(torch.randn(self.vocab_size, dims) / layers)
-
-        self.all = nn.Sequential(
-            *(
-                mxp.FractalTransformer(
-                    dims, 2, MLP, mask=mask2d, pos_encoder=self.pos_encode
-                )
-                for _ in range(layers)
-            )
-        )
 
         self.decode = nn.Linear(dims, self.vocab_size, False)
 
