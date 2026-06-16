@@ -126,8 +126,11 @@ def softxor(A: Tensor, B: Tensor):
 
 def swishmax_v2(
     X: Tensor,
-    *dim: int,
+    dim: int = -1,
 ) -> Tensor:
-    xmax = X * X.softmax(dim)
-    out = torch.div(xexp, (torch.sum(torch.abs(xexp), dim=dim, keepdim=True) + 1))
+    X_max = X * X.softmax(dim)
+    max_sum = X_max.sum(dim, keepdim=True)
+    shifted_X = X - max_sum
+    xexp = X * shifted_X.exp()
+    out = torch.div(xexp, (torch.sum(xexp**2, dim=dim, keepdim=True) + 1) ** 0.5)
     return out
