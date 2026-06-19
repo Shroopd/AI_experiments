@@ -25,8 +25,8 @@ class MLP(nn.Module):
         #     nn.Linear(2 * dims, dims, False),
         # )
 
-    def forward(self, X):
-        return self.out(xff.softor(self.lhs(X), self.rhs(X)))
+    def forward(self, A, B):
+        return self.out(xff.softor(self.lhs(A), self.rhs(B if B is not None else A)))
 
 
 class GPT(nn.Module):
