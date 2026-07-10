@@ -108,17 +108,17 @@ def apply(
 
 
 def softand(A: Tensor, B: Tensor):
-    AB = torch.cat((A, B), 0)
+    AB = torch.stack((A, B), 0)
     return (AB * ff.softmin(AB, 0)).sum(0)
 
 
 def softor(A: Tensor, B: Tensor):
-    AB = torch.cat((A, B), 0)
+    AB = torch.stack((A, B), 0)
     return (AB * ff.softmax(AB, 0)).sum(0)
 
 
 def softxor(A: Tensor, B: Tensor):
-    AB = torch.cat((A, B), 0)
+    AB = torch.stack((A, B), 0)
     C = (AB * ff.softmin(AB, 0)).sum(0)
     D = (AB * AB.softmax(0)).sum(0)
     return softand(C, D)
