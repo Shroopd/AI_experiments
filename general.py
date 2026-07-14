@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import math
 import itertools
+import math
 from typing import Callable, Iterable
 
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as ff
 from torch.nn.parameter import Parameter
-from torch import Tensor
 
 
 def swishmax(
@@ -570,7 +569,6 @@ class LinearBiasActivateZP(nn.Module):
         self.activation = activation
 
     def forward(self, input: Tensor) -> Tensor:
-
         return self.activation(
             ff.linear(input, self.weight, self.bias)
         ) - self.activation(self.bias)

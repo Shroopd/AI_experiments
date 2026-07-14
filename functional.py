@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-import math
-import itertools
 from typing import Callable, Iterable
 
 import torch
-from torch import nn
-from torch.nn import functional as ff
-from torch.nn.parameter import Parameter
 from torch import Tensor
-
-import general
+from torch.nn import functional as ff
 
 
 def insert_ones(shape: Iterable[int], *dims: int):
@@ -32,7 +26,7 @@ def unsqueeze_multi(
     X: Tensor,
     *dims: int,
 ) -> tuple[Tensor, tuple[int, ...]]:
-    r"""
+    """
     unsqueeze_multi(input, dim) -> Tensor, tuple[int, ...]
 
     Applies :func:`torch.unsqueeze` to all dimensions in parallel.
