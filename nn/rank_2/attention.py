@@ -24,5 +24,5 @@ class Attention(Module):
         self.key_proj: Linear = lin()
         self.query_proj: Linear = lin()
         self.logit_proj: Linear = lin()
-        self.gate_proj: Linear = lin()
         self.value_proj: Linear = lin()
+        self.output_proj: Linear = lin()
