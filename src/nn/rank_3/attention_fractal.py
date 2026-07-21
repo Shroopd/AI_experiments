@@ -7,7 +7,7 @@ from torch import nn, Tensor
 from torch.nn import Module
 from torch.nn import functional as ff
 
-import functional as ff
+import src.functional as ff
 
 
 class AttentionFractal(Module):

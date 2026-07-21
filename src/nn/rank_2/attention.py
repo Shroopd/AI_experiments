@@ -7,7 +7,7 @@ from torch import nn, Tensor
 from torch.nn import Module, Linear
 from torch.nn import functional as ff
 
-import functional as xff
+import src.functional as xff
 
 
 class Attention(Module):

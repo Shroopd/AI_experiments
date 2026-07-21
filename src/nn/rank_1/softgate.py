@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from torch.nn import Module, Linear
 
-import functional as xff
+import src.functional as xff
 
 
 class SoftGate(Module):
