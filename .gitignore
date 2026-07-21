@@ -181,3 +181,12 @@ cython_debug/
 .cursorindexingignore
 *.pt
 /experiments/fractal_graphviz
+
+# Obsidian device-specific workspace state
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/workspaces.json
+.obsidian/graph.json
+
+# Generated/cache data
+.obsidian/cache/
