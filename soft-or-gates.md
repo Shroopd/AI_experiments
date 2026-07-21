@@ -1,3 +1,9 @@
+---
+tags:
+ - softmax
+---
+
+
 # Soft OR Gates: Ternary Logic in Transformer MLPs
 
 ## 1. Ternary Logic Foundation
