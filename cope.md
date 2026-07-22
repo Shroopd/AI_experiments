@@ -186,6 +186,16 @@ See [CoPE Hypothesis](cope-hypothesis.md) for formal experimental hypotheses and
 
 ---
 
+## Human note: GLU replacement for CoPE
+
+Instead of any GLU, just do three projections A, B, and C from the embedding.
+Then pass forwards `A * B + C` 
+This gives a residual connection for deep stability, as well as a nice mix of potential operations
+If a dimension in `(A * B)` equals -C, then it performs a gating operation on C
+If a dimension in C is always 0, then it's purely an abstract addition on the encoded data via `A * B`
+
+---
+
 ## Relation to Associative Memory
 
 Attention can be viewed as a differentiable associative array:
