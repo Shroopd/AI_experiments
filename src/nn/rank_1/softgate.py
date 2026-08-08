@@ -1,24 +1,19 @@
 from __future__ import annotations
 
-from torch.nn import Module, Linear
+from torch.nn import Linear, Module
 
 import src.functional as xff
 
 
 class SoftGate(Module):
     def __init__(
-        self,
-        input: int,
-        middle: int,
-        output: int | None,
-        *,
-        bias=False
+        self, input_dims: int, op_dims: int, output: int | None, *, bias=False
     ) -> None:
         super().__init__()
-        self.linA = Linear(input, middle,bias)
-        self.linB = Linear(input, middle,bias)
+        self.linA = Linear(input_dims, op_dims, bias)
+        self.linB = Linear(input_dims, op_dims, bias)
         if output is not None:
-            self.linout = Linear(middle, output)
+            self.linout = Linear(op_dims, output)
 
     def forward(self, X):
         A = self.linA(X)
