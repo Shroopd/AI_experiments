@@ -101,14 +101,14 @@ def apply(
     return values_summed
 
 
-def softand(A: Tensor, B: Tensor):
-    AB = torch.stack((A, B), 0)
-    return (AB * ff.softmin(AB, 0)).sum(0)
+def softand(*X: Tensor):
+    out = torch.stack(X, 0)
+    return (out * ff.softmin(out, 0)).sum(0)
 
 
-def softor(A: Tensor, B: Tensor):
-    AB = torch.stack((A, B), 0)
-    return (AB * ff.softmax(AB, 0)).sum(0)
+def softor(*X: Tensor):
+    out = torch.stack(X, 0)
+    return (out * ff.softmax(out, 0)).sum(0)
 
 
 def softxor(A: Tensor, B: Tensor):
